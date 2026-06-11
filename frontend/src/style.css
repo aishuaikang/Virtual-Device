@@ -1,0 +1,38 @@
+@font-face {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 400;
+    src:
+        local(""),
+        url("assets/fonts/nunito-v16-latin-regular.woff2") format("woff2");
+}
+
+:root {
+    color-scheme: light;
+    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html,
+body,
+#root,
+#app {
+    height: 100%;
+}
+
+html {
+    background: #dde1e7;
+}
+
+body {
+    margin: 0;
+    background: #dde1e7;
+    color: #1e2329;
+    text-align: left;
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
