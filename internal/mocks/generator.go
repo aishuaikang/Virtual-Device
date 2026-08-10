@@ -18,6 +18,8 @@ import (
 	"github.com/brianvoe/gofakeit/v7"
 )
 
+const ridSerialPrefix = "1581"
+
 type MockDataGenerator interface {
 	GenerateAnalysisData(deviceID int) fmt.Stringer
 	GenerateDetectionData(deviceID int, command *utils.DetectionCommand) fmt.Stringer
@@ -411,10 +413,10 @@ func (m *mockDataGenerator) generateSerial() string {
 }
 
 // generateSerialWithBatch 生成带批次号和序号的序列号（用于随机无人机）
-// 格式: B{批次号6位}-S{序号4位}
-// 例如: B000001-S0001
+// 格式: B{批次号6位}S{序号4位}，保持 RID 后缀为至少 12 位 ASCII 字母数字。
+// 例如: B000001S0001
 func (m *mockDataGenerator) generateSerialWithBatch(batchNo, seqNo int) string {
-	serial := fmt.Sprintf("-B%06d-S%04d", batchNo, seqNo)
+	serial := fmt.Sprintf("B%06dS%04d", batchNo, seqNo)
 	return serial
 }
 
@@ -972,8 +974,8 @@ func (m *mockDataGenerator) generateRID(droneInfo *DroneInfo) *RID {
 
 	newDroneInfo := droneInfo.GenerateRandomDroneInfo(m.faker)
 
-	if m.isDJIModel(newDroneInfo.Model) {
-		newDroneInfo.Serial = fmt.Sprintf("1581%s", newDroneInfo.Serial)
+	if m.isDJIModel(newDroneInfo.Model) && !strings.HasPrefix(newDroneInfo.Serial, ridSerialPrefix) {
+		newDroneInfo.Serial = ridSerialPrefix + newDroneInfo.Serial
 	}
 
 	return &RID{
