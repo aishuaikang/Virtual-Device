@@ -12,8 +12,9 @@ import { config, engine } from "../wailsjs/go/models";
 import { EventsOn } from "../wailsjs/runtime/runtime";
 import { WindowSetTitle } from "../wailsjs/runtime/runtime";
 import ConfigEditor from "./components/ConfigEditor";
+import DirectedStrikePanel from "./components/DirectedStrikePanel";
 import ModuleStatus from "./components/ModuleStatus";
-import LogViewer from "./components/LogViewer";
+import OperationGuide from "./components/OperationGuide";
 import SceneSelector from "./components/SceneSelector";
 import "./App.css";
 
@@ -172,9 +173,9 @@ export default function App() {
 
   useEffect(() => {
     const moduleLogPattern =
-      /\[(?:侦测模块_UDP服务|解析模块|FPV模块|干扰模块)\]/;
+      /\[(?:侦测模块_UDP服务|解析模块|FPV模块|干扰模块|定向打击)\]/;
     const activityPattern =
-      /连接成功|新客户端连接|接收到来自|接收到数据|发送响应|发送侦测数据|发送告警数据|清理不活跃客户端|读取数据从 .* EOF/;
+      /连接成功|新客户端连接|客户端已连接|客户端已断开|\b(?:RX|TX)\b|接收到来自|接收到数据|发送响应|发送侦测数据|发送告警数据|清理不活跃客户端|读取数据从 .* EOF/;
 
     try {
       const cancel = EventsOn("log", (line: string) => {
@@ -275,11 +276,85 @@ export default function App() {
 
   if (!cfg) return <div className="loading">{t("app.loading")}</div>;
 
+  const directedConnections = status?.directedStrike?.activeConnections ?? 0;
+  const directedListening = Boolean(status?.directedStrike?.listening);
+  const directedEnabled = cfg.directed_strike?.enabled !== false;
+  const totalConnections =
+    status?.modules?.reduce(
+      (total, module) => total + (module.connectionCount ?? 0),
+      0,
+    ) ?? 0;
+  const workflowConnections = directedEnabled
+    ? directedConnections
+    : totalConnections;
+  const workflowListening = directedEnabled ? directedListening : running;
+  const runButtonLabel =
+    engineAction === "starting"
+      ? t("app.starting")
+      : engineAction === "stopping"
+        ? t("app.stopping")
+        : running
+          ? t("app.stopSimulation")
+          : t("app.startSimulation");
+
   return (
     <div className="app-layout">
       <header className="topbar">
-        <span className="app-title">{t("app.title")}</span>
-        <div className="topbar-right">
+        <div className="brand-lockup">
+          <span className="brand-mark" aria-hidden="true">
+            <i />
+            <b />
+          </span>
+          <div>
+            <strong>{t("app.title")}</strong>
+            <small>{t("app.subtitle")}</small>
+          </div>
+        </div>
+
+        <div className="workflow-strip" aria-label={t("app.workflow")}>
+          <span className={!running ? "is-active" : "is-complete"}>
+            <b>01</b> {t("app.configure")}
+          </span>
+          <i />
+          <span
+            className={
+              running && workflowConnections === 0
+                ? "is-active"
+                : running
+                  ? "is-complete"
+                  : ""
+            }
+          >
+            <b>02</b> {t("app.listen")}
+          </span>
+          <i />
+          <span className={workflowConnections > 0 ? "is-active" : ""}>
+            <b>03</b> {t("app.observe")}
+          </span>
+        </div>
+
+        <div className="topbar-actions">
+          <div
+            className={`endpoint-summary${workflowConnections > 0 ? " is-online" : ""}`}
+          >
+            <span className="endpoint-summary-dot" />
+            <span>
+              {workflowConnections > 0
+                ? t(
+                    directedEnabled
+                      ? "app.directedClients"
+                      : "app.activeConnections",
+                    { count: workflowConnections },
+                  )
+                : workflowListening
+                  ? t(
+                      directedEnabled
+                        ? "app.waitingConnection"
+                        : "app.waitingAnyConnection",
+                    )
+                  : t("app.waitingStart")}
+            </span>
+          </div>
           <SceneSelector
             currentCfg={cfg}
             onLoad={applyCfg}
@@ -288,6 +363,16 @@ export default function App() {
           />
           <button className="btn btn-ghost" onClick={toggleLang}>
             {i18n.language === "zh" ? "EN" : "中文"}
+          </button>
+          <button
+            className={`run-button${running ? " is-stop" : ""}${engineAction ? " is-pending" : ""}`}
+            onClick={running ? handleStop : handleStart}
+            disabled={engineAction !== null}
+          >
+            <span className="run-button-icon" aria-hidden="true">
+              {running ? "■" : "▶"}
+            </span>
+            {runButtonLabel}
           </button>
         </div>
       </header>
@@ -304,7 +389,9 @@ export default function App() {
       <div className="main-content">
         <aside className="left-panel">
           <div className="panel-header">
-            <span>{t("config.title")}</span>
+            <span>
+              <b>01</b> {t("config.title")}
+            </span>
             {running && (
               <span className="panel-header-badge">{t("config.readOnly")}</span>
             )}
@@ -314,16 +401,26 @@ export default function App() {
           </div>
         </aside>
 
-        <div className="right-panel">
+        <main className="runtime-panel">
           <ModuleStatus
             cfg={cfg}
             status={status}
-            onStart={handleStart}
-            onStop={handleStop}
             actionState={engineAction}
           />
-          <LogViewer />
-        </div>
+          <OperationGuide
+            cfg={cfg}
+            status={status}
+            actionState={engineAction}
+          />
+        </main>
+
+        <aside className="operations-panel">
+          <DirectedStrikePanel
+            config={cfg.directed_strike}
+            snapshot={status?.directedStrike}
+            running={running}
+          />
+        </aside>
       </div>
 
       <div className="toast-container">

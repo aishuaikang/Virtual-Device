@@ -56,6 +56,27 @@ func TestDefaultConfigIncludesThreeDetectionModules(t *testing.T) {
 	}
 }
 
+func TestDefaultConfigEnablesDirectedStrikeSimulator(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if !cfg.DirectedStrike.Enabled {
+		t.Fatal("expected directed strike simulator to be enabled")
+	}
+	if cfg.DirectedStrike.Host != "0.0.0.0" || cfg.DirectedStrike.Port != 19000 {
+		t.Fatalf("unexpected directed strike listen address: %#v", cfg.DirectedStrike)
+	}
+}
+
+func TestValidateConfigRejectsInvalidDirectedStrikeDelay(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.DirectedStrike.ResponseDelayMS = 10001
+
+	err := ValidateConfig(cfg)
+	if err == nil || !strings.Contains(err.Error(), "回执延迟") {
+		t.Fatalf("expected directed strike delay validation error, got %v", err)
+	}
+}
+
 func TestLegacyDetectionConfigPopulatesDetections(t *testing.T) {
 	raw := `{
 		"min_push_speed": 100,
@@ -83,6 +104,12 @@ func TestLegacyDetectionConfigPopulatesDetections(t *testing.T) {
 	}
 	if cfg.Detection.DeviceID != 2000 || cfg.Detections[0].DeviceID != 2000 {
 		t.Fatalf("expected detection compatibility fields to be synchronized, got detection=%#v detections=%#v", cfg.Detection, cfg.Detections)
+	}
+	if cfg.DirectedStrike.Enabled {
+		t.Fatal("expected a legacy config to preserve the new module as disabled")
+	}
+	if cfg.DirectedStrike.Host != "0.0.0.0" || cfg.DirectedStrike.Port != 19000 {
+		t.Fatalf("expected legacy config to receive usable directed strike defaults, got %#v", cfg.DirectedStrike)
 	}
 }
 

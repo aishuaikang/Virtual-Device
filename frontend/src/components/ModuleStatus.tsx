@@ -1,59 +1,31 @@
 import { useTranslation } from "react-i18next";
 import { config, engine } from "../../wailsjs/go/models";
 
-const MODULE_KEYS = ["detection", "analysis", "fpv", "jamming"] as const;
+const MODULES = [
+  { key: "detection", statusName: "detection" },
+  { key: "analysis", statusName: "analysis" },
+  { key: "fpv", statusName: "fpv" },
+  { key: "jamming", statusName: "jamming" },
+  { key: "directedStrike", statusName: "directed_strike" },
+] as const;
+
 type EngineAction = "starting" | "stopping" | null;
 
 interface Props {
   cfg: config.Config | null;
   status: engine.Status | null;
-  onStart: () => void;
-  onStop: () => void;
   actionState: EngineAction;
 }
 
-export default function ModuleStatus({
-  cfg,
-  status,
-  onStart,
-  onStop,
-  actionState,
-}: Props) {
-  const { t, i18n } = useTranslation();
+export default function ModuleStatus({ cfg, status, actionState }: Props) {
+  const { t } = useTranslation();
   const running = status?.running ?? false;
   const pending = actionState !== null;
-  const badgeClass =
-    actionState === "starting" || actionState === "stopping"
-      ? "badge-pending"
-      : running
-        ? "badge-running"
-        : "badge-stopped";
-  const badgeLabel =
-    actionState === "starting"
-      ? t("app.starting")
-      : actionState === "stopping"
-        ? t("app.stopping")
-        : running
-          ? t("app.running")
-          : t("app.stopped");
-  const buttonClass =
-    actionState === "stopping" || (running && actionState !== "starting")
-      ? "btn-danger"
-      : "btn-primary";
-  const buttonLabel =
-    actionState === "starting"
-      ? t("app.starting")
-      : actionState === "stopping"
-        ? t("app.stopping")
-        : running
-          ? t("app.stop")
-          : t("app.start");
-
   const getModule = (name: string) =>
-    status?.modules?.find((m) => m.name === name);
+    status?.modules?.find((module) => module.name === name);
 
-  const isModuleEnabled = (name: (typeof MODULE_KEYS)[number]) => {
-    switch (name) {
+  const isModuleEnabled = (key: (typeof MODULES)[number]["key"]) => {
+    switch (key) {
       case "detection":
         return cfg?.detections?.length
           ? cfg.detections.some((detection) => detection.enabled !== false)
@@ -64,98 +36,62 @@ export default function ModuleStatus({
         return cfg?.fpv?.enabled !== false;
       case "jamming":
         return cfg?.jamming?.enabled !== false;
+      case "directedStrike":
+        return cfg?.directed_strike?.enabled !== false;
     }
   };
 
-  const enabledModuleCount = MODULE_KEYS.filter((key) => isModuleEnabled(key))
-    .length;
+  const enabledModules = MODULES.filter(({ key }) => isModuleEnabled(key));
   const totalConnections =
     status?.modules?.reduce(
-      (count, module) => count + (module.connectionCount ?? 0),
+      (total, module) => total + (module.connectionCount ?? 0),
       0,
     ) ?? 0;
-  const formatLastActivity = (value?: string) => {
-    if (!value) {
-      return t("status.none");
-    }
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return value;
-    }
-
-    return new Intl.DateTimeFormat(
-      i18n.language === "zh" ? "zh-CN" : "en-US",
-      {
-        hour12: false,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      },
-    ).format(date);
-  };
+  const badgeClass = pending
+    ? "badge-pending"
+    : running
+      ? "badge-running"
+      : "badge-stopped";
+  const badgeLabel =
+    actionState === "starting"
+      ? t("app.starting")
+      : actionState === "stopping"
+        ? t("app.stopping")
+        : running
+          ? t("app.running")
+          : t("app.stopped");
 
   return (
-    <div className="module-status">
+    <section className="module-status">
       <div className="status-header">
         <div className="status-header-left">
+          <span className="panel-eyebrow">SYSTEM OVERVIEW</span>
           <span className="panel-title">{t("status.title")}</span>
           <div className="status-summary">
-            <span className="status-summary-item">
-              {t("status.droneCount", { count: status?.droneCount ?? 0 })}
-            </span>
-            <span className="status-summary-item">
-              {t("status.activeConnections", { count: totalConnections })}
-            </span>
-            <span className="status-summary-item">
-              {t("status.enabledModules", { count: enabledModuleCount })}
-            </span>
+            <span>{t("status.droneCount", { count: status?.droneCount ?? 0 })}</span>
+            <span>{t("status.activeConnections", { count: totalConnections })}</span>
+            <span>{t("status.enabledModules", { count: enabledModules.length })}</span>
           </div>
         </div>
-        <div className="engine-controls">
-          <span className={`engine-badge ${badgeClass}`}>{badgeLabel}</span>
-          <button
-            className={`btn engine-action-btn ${buttonClass}${pending ? " is-pending" : ""}`}
-            onClick={running ? onStop : onStart}
-            disabled={pending}
-          >
-            <span className="engine-action-content">
-              <span className="engine-action-indicator" />
-              <span>{buttonLabel}</span>
-            </span>
-          </button>
-        </div>
+        <span className={`engine-badge ${badgeClass}`}>
+          <span />
+          {badgeLabel}
+        </span>
       </div>
+
       <div className="module-cards">
-        {MODULE_KEYS.map((key) => {
-          const mod = getModule(key);
+        {MODULES.map(({ key, statusName }) => {
+          const module = getModule(statusName);
           const enabled = isModuleEnabled(key);
-          const connected = enabled && (mod?.connected ?? false);
-          const connecting = enabled && actionState === "starting" && !connected;
-          const detectionDebug =
-            key === "detection" && enabled ? (
-              <div className="module-debug">
-                <div className="module-debug-line">
-                  <span className="module-debug-label">
-                    {t("status.lastPacket")}
-                  </span>
-                  <span>{formatLastActivity(mod?.lastActivityAt)}</span>
-                </div>
-                <div className="module-debug-line">
-                  <span className="module-debug-label">
-                    {t("status.activeClientsLabel")}
-                  </span>
-                  <span className="module-debug-value">
-                    {mod?.clientAddresses?.length
-                      ? mod.clientAddresses.join(", ")
-                      : t("status.none")}
-                  </span>
-                </div>
-              </div>
-            ) : null;
+          const connected = enabled && (module?.connected ?? false);
+          const directedListening =
+            key === "directedStrike" &&
+            running &&
+            Boolean(status?.directedStrike?.listening);
+          const connecting =
+            enabled &&
+            !connected &&
+            (actionState === "starting" || directedListening);
           const cardClass = !enabled
             ? "card-disabled"
             : connected
@@ -163,31 +99,32 @@ export default function ModuleStatus({
               : connecting
                 ? "card-connecting"
                 : "";
+          const stateLabel = !enabled
+            ? t("status.disabled")
+            : connected
+              ? t("status.connected")
+              : connecting
+                ? key === "directedStrike"
+                  ? t("status.listening")
+                  : t("status.connecting")
+                : t("status.disconnected");
+
           return (
-            <div key={key} className={`module-card ${cardClass}`}>
+            <article key={key} className={`module-card ${cardClass}`}>
               <div className="module-card-top">
-                <div className="module-dot" />
-                <div className="module-name">{t(`status.${key}`)}</div>
+                <span className="module-dot" />
+                <span className="module-name">{t(`status.${key}`)}</span>
               </div>
-              <div className="module-state">
-                {!enabled
-                  ? t("status.disabled")
-                  : connecting
-                    ? t("status.connecting")
-                    : connected
-                      ? t("status.connected")
-                    : t("status.disconnected")}
-              </div>
-              <div className="module-meta">
+              <strong className="module-state">{stateLabel}</strong>
+              <span className="module-meta">
                 {t("status.connections", {
-                  count: mod?.connectionCount ?? 0,
+                  count: module?.connectionCount ?? 0,
                 })}
-              </div>
-              {detectionDebug}
-            </div>
+              </span>
+            </article>
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }

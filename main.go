@@ -17,9 +17,11 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "虚拟设备模拟器",
-		Width:  1024,
-		Height: 768,
+		Title:     "虚拟设备模拟器",
+		Width:     1360,
+		Height:    860,
+		MinWidth:  1040,
+		MinHeight: 700,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

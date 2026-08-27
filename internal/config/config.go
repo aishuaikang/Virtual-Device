@@ -56,6 +56,14 @@ type DetectionConfig struct {
 	HeartbeatInterval int    `json:"heartbeat_interval"` // 心跳间隔，单位秒
 }
 
+// DirectedStrikeConfig configures the simulated directed-strike TCP device.
+type DirectedStrikeConfig struct {
+	Enabled         bool   `json:"enabled"`
+	Host            string `json:"host"`
+	Port            int    `json:"port"`
+	ResponseDelayMS int    `json:"response_delay_ms"`
+}
+
 func (c *BaseConfig) UnmarshalJSON(data []byte) error {
 	type rawBaseConfig struct {
 		Enabled  *bool    `json:"enabled"`
@@ -143,18 +151,19 @@ func (c *DetectionConfig) UnmarshalJSON(data []byte) error {
 
 // Config 配置结构体
 type Config struct {
-	MinPushSpeed               int               `json:"min_push_speed"`                 // 全局最小推送间隔（毫秒）
-	MaxPushSpeed               int               `json:"max_push_speed"`                 // 全局最大推送间隔（毫秒）
-	PredefinedDrones           []PredefinedDrone `json:"predefined_drones"`              // 预定义的无人机列表（与模块内drone_count可同时使用）
-	RandomDroneRefreshInterval int               `json:"random_drone_refresh_interval"`  // 随机无人机刷新间隔（秒），0表示不刷新
-	MaxDirectionChange         float64           `json:"max_direction_change"`           // 最大方向变化，单位度
-	MaxDistanceFromCenterPoint float64           `json:"max_distance_from_center_point"` // 最大距离中心点距离，单位米
-	CenterPoint                GPS               `json:"center_point"`                   // 中心点
-	Analysis                   AnalysisConfig    `json:"analysis"`                       // 解析模块配置
-	Detection                  DetectionConfig   `json:"detection"`                      // 侦测模块配置
-	Detections                 []DetectionConfig `json:"detections"`                     // 多侦测模块配置
-	FPV                        BaseConfig        `json:"fpv"`                            // FPV模块配置
-	Jamming                    BaseConfig        `json:"jamming"`                        // 干扰模块配置
+	MinPushSpeed               int                  `json:"min_push_speed"`                 // 全局最小推送间隔（毫秒）
+	MaxPushSpeed               int                  `json:"max_push_speed"`                 // 全局最大推送间隔（毫秒）
+	PredefinedDrones           []PredefinedDrone    `json:"predefined_drones"`              // 预定义的无人机列表（与模块内drone_count可同时使用）
+	RandomDroneRefreshInterval int                  `json:"random_drone_refresh_interval"`  // 随机无人机刷新间隔（秒），0表示不刷新
+	MaxDirectionChange         float64              `json:"max_direction_change"`           // 最大方向变化，单位度
+	MaxDistanceFromCenterPoint float64              `json:"max_distance_from_center_point"` // 最大距离中心点距离，单位米
+	CenterPoint                GPS                  `json:"center_point"`                   // 中心点
+	Analysis                   AnalysisConfig       `json:"analysis"`                       // 解析模块配置
+	Detection                  DetectionConfig      `json:"detection"`                      // 侦测模块配置
+	Detections                 []DetectionConfig    `json:"detections"`                     // 多侦测模块配置
+	FPV                        BaseConfig           `json:"fpv"`                            // FPV模块配置
+	Jamming                    BaseConfig           `json:"jamming"`                        // 干扰模块配置
+	DirectedStrike             DirectedStrikeConfig `json:"directed_strike"`                // 定向打击设备模拟器配置
 }
 
 func normalizeOptionalString(value *string) *string {
@@ -214,6 +223,7 @@ func NormalizeConfig(cfg *Config) {
 	normalizeDetectionConfig(&cfg.Detection)
 	cfg.FPV.Hosts = normalizeHosts(cfg.FPV.Hosts)
 	cfg.Jamming.Hosts = normalizeHosts(cfg.Jamming.Hosts)
+	cfg.DirectedStrike.Host = strings.TrimSpace(cfg.DirectedStrike.Host)
 	cfg.Analysis.O3PlusO4DataFile = normalizeOptionalString(cfg.Analysis.O3PlusO4DataFile)
 
 	if len(cfg.Detections) == 0 {
@@ -240,19 +250,20 @@ func ValidateConfig(cfg *Config) error {
 
 func (c *Config) UnmarshalJSON(data []byte) error {
 	type rawConfig struct {
-		MinPushSpeed               int               `json:"min_push_speed"`
-		MaxPushSpeed               int               `json:"max_push_speed"`
-		LegacyDroneCount           *int              `json:"drone_count"`
-		PredefinedDrones           []PredefinedDrone `json:"predefined_drones"`
-		RandomDroneRefreshInterval int               `json:"random_drone_refresh_interval"`
-		MaxDirectionChange         float64           `json:"max_direction_change"`
-		MaxDistanceFromCenterPoint float64           `json:"max_distance_from_center_point"`
-		CenterPoint                GPS               `json:"center_point"`
-		Analysis                   json.RawMessage   `json:"analysis"`
-		Detection                  json.RawMessage   `json:"detection"`
-		Detections                 []json.RawMessage `json:"detections"`
-		FPV                        BaseConfig        `json:"fpv"`
-		Jamming                    BaseConfig        `json:"jamming"`
+		MinPushSpeed               int                   `json:"min_push_speed"`
+		MaxPushSpeed               int                   `json:"max_push_speed"`
+		LegacyDroneCount           *int                  `json:"drone_count"`
+		PredefinedDrones           []PredefinedDrone     `json:"predefined_drones"`
+		RandomDroneRefreshInterval int                   `json:"random_drone_refresh_interval"`
+		MaxDirectionChange         float64               `json:"max_direction_change"`
+		MaxDistanceFromCenterPoint float64               `json:"max_distance_from_center_point"`
+		CenterPoint                GPS                   `json:"center_point"`
+		Analysis                   json.RawMessage       `json:"analysis"`
+		Detection                  json.RawMessage       `json:"detection"`
+		Detections                 []json.RawMessage     `json:"detections"`
+		FPV                        BaseConfig            `json:"fpv"`
+		Jamming                    BaseConfig            `json:"jamming"`
+		DirectedStrike             *DirectedStrikeConfig `json:"directed_strike"`
 	}
 
 	type moduleCount struct {
@@ -273,6 +284,11 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	c.CenterPoint = raw.CenterPoint
 	c.FPV = raw.FPV
 	c.Jamming = raw.Jamming
+	if raw.DirectedStrike != nil {
+		c.DirectedStrike = *raw.DirectedStrike
+	} else {
+		c.DirectedStrike = defaultDirectedStrikeConfig(false)
+	}
 
 	if len(raw.Analysis) > 0 {
 		if err := json.Unmarshal(raw.Analysis, &c.Analysis); err != nil {
@@ -457,9 +473,19 @@ func DefaultConfig() *Config {
 			Hosts:    []string{"127.0.0.1"},
 			Port:     10003,
 		},
+		DirectedStrike: defaultDirectedStrikeConfig(true),
 	}
 	NormalizeConfig(cfg)
 	return cfg
+}
+
+func defaultDirectedStrikeConfig(enabled bool) DirectedStrikeConfig {
+	return DirectedStrikeConfig{
+		Enabled:         enabled,
+		Host:            "0.0.0.0",
+		Port:            19000,
+		ResponseDelayMS: 0,
+	}
 }
 
 var globalConfig *Config
@@ -609,6 +635,26 @@ func validateConfig(config *Config) error {
 		return fmt.Errorf("jamming配置错误: %v", err)
 	}
 
+	if err := validateDirectedStrikeConfig(&config.DirectedStrike); err != nil {
+		return fmt.Errorf("定向打击模拟器配置错误: %v", err)
+	}
+
+	return nil
+}
+
+func validateDirectedStrikeConfig(config *DirectedStrikeConfig) error {
+	if !config.Enabled {
+		return nil
+	}
+	if config.Host == "" {
+		return fmt.Errorf("监听地址不能为空")
+	}
+	if config.Port < 1 || config.Port > 65535 {
+		return fmt.Errorf("监听端口必须在1到65535之间")
+	}
+	if config.ResponseDelayMS < 0 || config.ResponseDelayMS > 10000 {
+		return fmt.Errorf("回执延迟必须在0到10000毫秒之间")
+	}
 	return nil
 }
 

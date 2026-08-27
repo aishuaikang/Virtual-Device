@@ -830,6 +830,49 @@ export default function ConfigEditor({ cfg, onChange, disabled }: Props) {
         </Field>
       </Section>
 
+      <Section title={t("config.directedStrike")}>
+        <div className="simulator-section-intro">
+          <span className="simulator-section-kicker">TCP DEVICE</span>
+          <span>{t("config.directedStrikeHint")}</span>
+        </div>
+        <ToggleField
+          label={t("config.enabled")}
+          checked={cfg.directed_strike?.enabled !== false}
+          onChange={(checked) =>
+            set(["directed_strike", "enabled"], checked)
+          }
+          disabled={disabled}
+        />
+        <div className="field-row">
+          <Field label={t("config.listenHost")}>
+            <IPInput
+              value={cfg.directed_strike?.host ?? "0.0.0.0"}
+              onChange={(value) => set(["directed_strike", "host"], value)}
+              localIPs={localIPs}
+              disabled={disabled}
+            />
+          </Field>
+          <Field label={t("config.listenPort")}>
+            <ClearableNumberInput
+              value={cfg.directed_strike?.port ?? 19000}
+              onValueChange={num(["directed_strike", "port"])}
+              min={1}
+              max={65535}
+              disabled={disabled}
+            />
+          </Field>
+        </div>
+        <Field label={t("config.responseDelay")}>
+          <ClearableNumberInput
+            value={cfg.directed_strike?.response_delay_ms ?? 0}
+            onValueChange={num(["directed_strike", "response_delay_ms"])}
+            min={0}
+            max={10000}
+            disabled={disabled}
+          />
+        </Field>
+      </Section>
+
       {(["fpv", "jamming"] as const).map((mod) => (
         <Section key={mod} title={t(`config.${mod}`)}>
           <ToggleField

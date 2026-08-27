@@ -2,7 +2,9 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net"
 	"sync"
 	"time"
 
@@ -23,12 +25,13 @@ type ModuleStatus struct {
 
 // Status 整体引擎状态
 type Status struct {
-	Running    bool           `json:"running"`
-	Modules    []ModuleStatus `json:"modules"`
-	DroneCount int            `json:"droneCount"`
+	Running        bool                            `json:"running"`
+	Modules        []ModuleStatus                  `json:"modules"`
+	DroneCount     int                             `json:"droneCount"`
+	DirectedStrike *modules.DirectedStrikeSnapshot `json:"directedStrike,omitempty"`
 }
 
-// Engine 统一管理四个模块的生命周期
+// Engine 统一管理所有模拟模块的生命周期
 type Engine struct {
 	mu      sync.Mutex
 	running bool
@@ -36,10 +39,11 @@ type Engine struct {
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
 
-	analysis   modules.AnalysisModule
-	fpv        modules.FPVModule
-	detections []modules.DetectionUDPServerModule
-	jamming    modules.JammingModule
+	analysis       modules.AnalysisModule
+	fpv            modules.FPVModule
+	detections     []modules.DetectionUDPServerModule
+	jamming        modules.JammingModule
+	directedStrike modules.DirectedStrikeModule
 
 	analysisMock   mocks.MockDataGenerator
 	detectionMocks []mocks.MockDataGenerator
@@ -66,6 +70,7 @@ func (e *Engine) Start(cfg *config.Config) error {
 	e.fpv = nil
 	e.detections = nil
 	e.jamming = nil
+	e.directedStrike = nil
 
 	if cfg.Analysis.Enabled {
 		log.Printf("[Engine] 创建解析模块，设备ID=%d", cfg.Analysis.DeviceID)
@@ -100,6 +105,18 @@ func (e *Engine) Start(cfg *config.Config) error {
 		log.Printf("[Engine] 创建干扰打击模块，设备ID=%d", cfg.Jamming.DeviceID)
 		e.jamming = modules.NewJammingModule(cfg.Jamming.DeviceID)
 	}
+	if cfg.DirectedStrike.Enabled {
+		listenAddress := net.JoinHostPort(cfg.DirectedStrike.Host, fmt.Sprintf("%d", cfg.DirectedStrike.Port))
+		log.Printf("[Engine] 创建定向打击模拟器，监听地址=%s", listenAddress)
+		directedStrike, err := modules.NewDirectedStrikeModule(
+			listenAddress,
+			time.Duration(cfg.DirectedStrike.ResponseDelayMS)*time.Millisecond,
+		)
+		if err != nil {
+			return fmt.Errorf("启动定向打击模拟器: %w", err)
+		}
+		e.directedStrike = directedStrike
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	e.ctx = ctx
@@ -126,6 +143,10 @@ func (e *Engine) Start(cfg *config.Config) error {
 	if e.jamming != nil {
 		e.wg.Add(1)
 		go func() { defer e.wg.Done(); e.jamming.Start() }()
+	}
+	if e.directedStrike != nil {
+		e.wg.Add(1)
+		go func() { defer e.wg.Done(); e.directedStrike.Start() }()
 	}
 
 	if cfg.RandomDroneRefreshInterval > 0 {
@@ -176,6 +197,9 @@ func (e *Engine) Stop() {
 	if e.jamming != nil {
 		e.jamming.Stop()
 	}
+	if e.directedStrike != nil {
+		e.directedStrike.Stop()
+	}
 	e.running = false
 
 	done := make(chan struct{})
@@ -206,6 +230,7 @@ func (e *Engine) GetStatus() Status {
 	fpv := e.fpv
 	detections := append([]modules.DetectionUDPServerModule(nil), e.detections...)
 	jamming := e.jamming
+	directedStrike := e.directedStrike
 	analysisMock := e.analysisMock
 	detectionMocks := append([]mocks.MockDataGenerator(nil), e.detectionMocks...)
 	e.mu.Unlock()
@@ -218,6 +243,7 @@ func (e *Engine) GetStatus() Status {
 				{Name: "detection"},
 				{Name: "fpv"},
 				{Name: "jamming"},
+				{Name: "directed_strike"},
 			},
 		}
 	}
@@ -257,15 +283,28 @@ func (e *Engine) GetStatus() Status {
 	if jamming != nil {
 		jammingCount = jamming.ConnectedCount()
 	}
+	var directedStrikeSnapshot *modules.DirectedStrikeSnapshot
+	directedStrikeStatus := ModuleStatus{Name: "directed_strike"}
+	if directedStrike != nil {
+		snapshot := directedStrike.Snapshot()
+		directedStrikeSnapshot = &snapshot
+		directedStrikeStatus.Connected = snapshot.ActiveConnections > 0
+		directedStrikeStatus.ConnectionCount = snapshot.ActiveConnections
+		directedStrikeStatus.SentCount = int64(snapshot.SentFrames)
+		directedStrikeStatus.LastActivityAt = snapshot.LastActivityAt
+		directedStrikeStatus.ClientAddresses = append([]string(nil), snapshot.ClientAddresses...)
+	}
 
 	return Status{
-		Running:    true,
-		DroneCount: droneCount,
+		Running:        true,
+		DroneCount:     droneCount,
+		DirectedStrike: directedStrikeSnapshot,
 		Modules: []ModuleStatus{
 			{Name: "analysis", Connected: analysisCount > 0, ConnectionCount: analysisCount},
 			{Name: "detection", Connected: detectionCount > 0, ConnectionCount: detectionCount, LastActivityAt: detectionLastActivity, ClientAddresses: detectionClients},
 			{Name: "fpv", Connected: fpvCount > 0, ConnectionCount: fpvCount},
 			{Name: "jamming", Connected: jammingCount > 0, ConnectionCount: jammingCount},
+			directedStrikeStatus,
 		},
 	}
 }
