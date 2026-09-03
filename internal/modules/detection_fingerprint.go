@@ -33,7 +33,7 @@ type detectionString string
 
 func (d detectionString) String() string { return string(d) }
 
-var fingerprintRawNamePattern = regexp.MustCompile(`^type_[A-Za-z0-9_-]{1,32}$`)
+var fingerprintRawNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,32}$`)
 
 func parseFingerprintCommand(command string) (fingerprintCommand, bool) {
 	fields := strings.Fields(strings.TrimSpace(command))
@@ -108,6 +108,7 @@ func (f *detectionUDPServer) handleFingerprintCommand(
 		session.fingerprintTraining = true
 		session.trainingFrequency = command.frequency
 		session.mu.Unlock()
+		send("The device support AI")
 		go f.streamFingerprintTraining(trainingCtx, conn, addr, session, command.frequency)
 	case fingerprintCommandSave:
 		session.mu.Lock()
@@ -140,8 +141,11 @@ func (f *detectionUDPServer) handleFingerprintCommand(
 		}
 		f.fingerprintMu.Unlock()
 		send(command.name + " is saved.,")
+		send(buildDetectorCommandAck(f.deviceId, "-save "+command.name))
 	case fingerprintCommandList:
-		send(f.fingerprintListResponse())
+		if response := f.fingerprintListResponse(); response != "" {
+			send(response)
+		}
 	case fingerprintCommandDelete:
 		var deleted string
 		f.fingerprintMu.Lock()
@@ -157,7 +161,9 @@ func (f *detectionUDPServer) handleFingerprintCommand(
 			}
 			session.mu.Unlock()
 		}
-		send(f.fingerprintListResponse())
+		if response := f.fingerprintListResponse(); response != "" {
+			send(response)
+		}
 	}
 	return true
 }
@@ -169,22 +175,30 @@ func (f *detectionUDPServer) streamFingerprintTraining(
 	session *clientSession,
 	frequency int,
 ) {
-	ticker := time.NewTicker(250 * time.Millisecond)
-	defer ticker.Stop()
+	sampleTicker := time.NewTicker(65 * time.Millisecond)
+	defer sampleTicker.Stop()
+	heartbeatInterval := time.Duration(f.detectionCfg.HeartbeatInterval) * time.Second
+	if heartbeatInterval <= 0 {
+		heartbeatInterval = 10 * time.Second
+	}
+	heartbeatTicker := time.NewTicker(heartbeatInterval)
+	defer heartbeatTicker.Stop()
 	sampleCount := 0
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-sampleTicker.C:
 			sampleCount++
-			observed := float64(frequency) + rand.Float64()*1.6 - 0.8
-			confidence := 0.82 + float64(sampleCount)*0.008 + rand.Float64()*0.01
-			if confidence > 0.998 {
-				confidence = 0.998
-			}
+			observed, confidence := fingerprintTrainingSample(frequency, sampleCount)
 			message := fmt.Sprintf("freq=%.1f, Confidence=%.3f,", observed, confidence)
 			if _, err := conn.WriteToUDP([]byte(message), addr); err != nil {
+				continue
+			}
+			f.touchSession(session)
+		case <-heartbeatTicker.C:
+			data := f.mock.GenerateDirectionHeartbeatData(f.deviceId)
+			if _, err := conn.WriteToUDP([]byte(data.String()), addr); err != nil {
 				continue
 			}
 			f.touchSession(session)
@@ -192,9 +206,37 @@ func (f *detectionUDPServer) streamFingerprintTraining(
 	}
 }
 
+func fingerprintTrainingSample(frequency, sampleCount int) (float64, float64) {
+	switch sampleCount {
+	case 1:
+		return staleTrainingFrequency(frequency, 0), 0
+	case 2:
+		return staleTrainingFrequency(frequency, 30), 0
+	case 3, 4, 5, 6, 7, 8, 9, 10, 11, 12:
+		return float64(frequency), 0
+	}
+
+	observed := float64(frequency) + rand.Float64()*1.6 - 0.8
+	if sampleCount%12 == 1 || sampleCount%12 == 2 {
+		return observed, 0
+	}
+	return observed, 0.9 + rand.Float64()*0.1
+}
+
+func staleTrainingFrequency(frequency, offset int) float64 {
+	stale := 5215 + offset
+	if frequency < stale-2 || frequency > stale+2 {
+		return float64(stale)
+	}
+	return 750 + float64(offset)
+}
+
 func (f *detectionUDPServer) fingerprintListResponse() string {
 	f.fingerprintMu.RLock()
 	defer f.fingerprintMu.RUnlock()
+	if len(f.fingerprints) == 0 {
+		return ""
+	}
 	var response strings.Builder
 	response.WriteString("the pattern is list below:")
 	for index, name := range f.fingerprints {

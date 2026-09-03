@@ -22,7 +22,8 @@ func TestParseFingerprintCommand(t *testing.T) {
 	}{
 		{name: "capability", input: "-train\n", wantOK: true, wantKind: fingerprintCommandCapability},
 		{name: "train", input: "-train 2455\n", wantOK: true, wantKind: fingerprintCommandTrain, frequency: 2455},
-		{name: "save", input: "-save type_xiaomi8\n", wantOK: true, wantKind: fingerprintCommandSave, rawName: "type_xiaomi8"},
+		{name: "save", input: "-save xiaomi8\n", wantOK: true, wantKind: fingerprintCommandSave, rawName: "xiaomi8"},
+		{name: "save with custom prefix", input: "-save brand_xiaomi8\n", wantOK: true, wantKind: fingerprintCommandSave, rawName: "brand_xiaomi8"},
 		{name: "list", input: "-list_type\n", wantOK: true, wantKind: fingerprintCommandList},
 		{name: "delete", input: "-del_type 2\n", wantOK: true, wantKind: fingerprintCommandDelete, index: 2},
 		{name: "frequency too low", input: "-train 69", wantOK: false},
@@ -92,31 +93,52 @@ func TestDetectionUDPServerSimulatesFingerprintTrainingLifecycle(t *testing.T) {
 	}
 
 	writeFingerprintCommand(t, conn, "-train 2455\n")
+	if got := waitForUDPText(t, conn, 2*time.Second, func(message string) bool {
+		return strings.Contains(message, "support AI")
+	}); got == "" {
+		t.Fatal("timed out waiting for training capability response")
+	}
+	staleSample := waitForUDPText(t, conn, 2*time.Second, func(message string) bool {
+		return strings.Contains(message, "freq=") && !strings.Contains(message, "freq=2455.")
+	})
+	if staleSample == "" {
+		t.Fatal("timed out waiting for stale transition sample")
+	}
 	sample := waitForUDPText(t, conn, 2*time.Second, func(message string) bool {
-		return strings.Contains(message, "freq=") && strings.Contains(message, "Confidence=")
+		return strings.Contains(message, "freq=2455.") && strings.Contains(message, "Confidence=")
 	})
 	if sample == "" {
 		t.Fatal("timed out waiting for fingerprint training sample")
 	}
+	if heartbeat := waitForUDPText(t, conn, 2*time.Second, func(message string) bool {
+		return strings.Contains(message, "Heart_Beat")
+	}); heartbeat == "" {
+		t.Fatal("timed out waiting for heartbeat during fingerprint training")
+	}
 
-	writeFingerprintCommand(t, conn, "-save type_xiaomi8\n")
+	writeFingerprintCommand(t, conn, "-save xiaomi8\n")
 	if got := waitForUDPText(t, conn, time.Second, func(message string) bool {
-		return strings.Contains(message, "type_xiaomi8 is saved")
+		return strings.Contains(message, "xiaomi8 is saved")
 	}); got == "" {
 		t.Fatal("timed out waiting for explicit saved response")
+	}
+	if got := waitForUDPText(t, conn, time.Second, func(message string) bool {
+		return strings.Contains(message, "-save xiaomi8")
+	}); got == "" {
+		t.Fatal("timed out waiting for save command acknowledgment")
 	}
 
 	writeFingerprintCommand(t, conn, "-list_type\n")
 	list := waitForUDPText(t, conn, time.Second, func(message string) bool {
 		return strings.Contains(message, "the pattern is list below:")
 	})
-	if !strings.Contains(list, "1 type_xiaomi8") {
+	if !strings.Contains(list, "1 xiaomi8") {
 		t.Fatalf("unexpected fingerprint list: %q", list)
 	}
 
 	writeFingerprintCommand(t, conn, "start -freq 2455 -set_ant 255,-turn_on_gpio 3\n")
 	detection := waitForUDPText(t, conn, 2*time.Second, func(message string) bool {
-		return strings.Contains(message, "model=type_xiaomi8 (user defined)")
+		return strings.Contains(message, "model=xiaomi8 (user defined)")
 	})
 	if detection == "" {
 		t.Fatal("timed out waiting for user-defined ordinary detection result")
@@ -126,8 +148,22 @@ func TestDetectionUDPServerSimulatesFingerprintTrainingLifecycle(t *testing.T) {
 	list = waitForUDPText(t, conn, time.Second, func(message string) bool {
 		return strings.Contains(message, "the pattern is list below:")
 	})
-	if list == "" || strings.Contains(list, "type_xiaomi8") {
-		t.Fatalf("fingerprint was not deleted: %q", list)
+	if list != "" {
+		t.Fatalf("empty fingerprint library unexpectedly returned a list: %q", list)
+	}
+	writeFingerprintCommand(t, conn, "-train\n")
+	if got := waitForUDPText(t, conn, time.Second, func(message string) bool {
+		return strings.Contains(message, "support AI")
+	}); got == "" {
+		t.Fatal("simulator stopped responding after deleting the last fingerprint")
+	}
+}
+
+func TestFingerprintListResponseIncludesLegacyRawNames(t *testing.T) {
+	server := &detectionUDPServer{fingerprints: []string{"test123", "type_530"}}
+	response := server.fingerprintListResponse()
+	if response != "the pattern is list below:\n1 test123\n2 type_530" {
+		t.Fatalf("response=%q", response)
 	}
 }
 
