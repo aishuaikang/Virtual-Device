@@ -33,18 +33,14 @@ type DetectionStatusSnapshot struct {
 
 // clientSession 客户端会话
 type clientSession struct {
-	addr                      *net.UDPAddr
-	ctx                       context.Context
-	cancel                    context.CancelFunc
-	lastSeen                  time.Time
-	isActive                  bool
-	mu                        sync.Mutex              // 保护会话的并发操作
-	isRunning                 bool                    // 标记任务是否已启动
-	lastCommand               *utils.DetectionCommand // 保存最后一次命令
-	fingerprintTraining       bool
-	trainingFrequency         int
-	savedFingerprintModel     string
-	savedFingerprintFrequency int
+	addr        *net.UDPAddr
+	ctx         context.Context
+	cancel      context.CancelFunc
+	lastSeen    time.Time
+	isActive    bool
+	mu          sync.Mutex              // 保护会话的并发操作
+	isRunning   bool                    // 标记任务是否已启动
+	lastCommand *utils.DetectionCommand // 保存最后一次命令
 }
 
 type detectionUDPServer struct {
@@ -55,13 +51,11 @@ type detectionUDPServer struct {
 	config *config.Config
 	mock   mocks.MockDataGenerator
 
-	conns         []*net.UDPConn
-	clients       map[string]*clientSession // key: addr.String()
-	clientMu      sync.RWMutex
-	fingerprintMu sync.RWMutex
-	fingerprints  []string
-	ctx           context.Context
-	cancel        context.CancelFunc
+	conns    []*net.UDPConn
+	clients  map[string]*clientSession // key: addr.String()
+	clientMu sync.RWMutex
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 func NewDetectionUDPModule(detectionCfg config.DetectionConfig, mock mocks.MockDataGenerator) DetectionUDPServerModule {
@@ -142,8 +136,6 @@ func (f *detectionUDPServer) Stop() {
 		session.ctx = nil
 		session.cancel = nil
 		session.lastCommand = nil
-		session.fingerprintTraining = false
-		session.trainingFrequency = 0
 		session.mu.Unlock()
 	}
 
@@ -216,9 +208,6 @@ func (f *detectionUDPServer) handleUDPConnection(conn *net.UDPConn, host string)
 
 			// 解析命令
 			dataStr := utils.DetectionCommandString(buf[:n])
-			if f.handleFingerprintCommand(conn, addr, session, string(dataStr)) {
-				continue
-			}
 			command, err := dataStr.ParseCommand()
 			if err != nil {
 				log.Printf("[%s-%d-%s] 解析命令失败: %v", f.title, f.deviceId, addrStr, err)
@@ -236,12 +225,6 @@ func (f *detectionUDPServer) handleUDPConnection(conn *net.UDPConn, host string)
 
 			// 使用会话锁防止并发操作
 			session.mu.Lock()
-			if session.fingerprintTraining && session.cancel != nil {
-				session.cancel()
-				session.fingerprintTraining = false
-				session.trainingFrequency = 0
-				session.isRunning = false
-			}
 
 			if command.Action == utils.ActionStop {
 				if session.cancel != nil {
@@ -426,18 +409,6 @@ func (f *detectionUDPServer) handleCommand(ctx context.Context, session *clientS
 			}
 
 			data := f.mock.GenerateDetectionData(f.deviceId, command)
-			session.mu.Lock()
-			userDefinedModel := session.savedFingerprintModel
-			userDefinedFrequency := session.savedFingerprintFrequency
-			session.mu.Unlock()
-			if userDefinedModel != "" {
-				data = detectionString(fmt.Sprintf(
-					"device=%d, model=%s (user defined), freq=%.1f, rssi=-45.0,\r\n",
-					f.deviceId,
-					userDefinedModel,
-					float64(userDefinedFrequency),
-				))
-			}
 			if _, err := conn.WriteToUDP([]byte(data.String()), addr); err != nil {
 				log.Printf("[%s-%d-%s] 发送侦测数据失败: %v", f.title, f.deviceId, addrStr, err)
 				continue

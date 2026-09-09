@@ -26,6 +26,52 @@ func reserveDetectionUDPPort(t *testing.T) int {
 	return port
 }
 
+func TestDetectionUDPServerRejectsRetiredTrainingCommands(t *testing.T) {
+	serverConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := NewDetectionUDPModule(config.DetectionConfig{DeviceID: 2000}, mocks.NewMockDataGenerator(0)).(*detectionUDPServer)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		server.handleUDPConnection(serverConn, "127.0.0.1")
+	}()
+	t.Cleanup(func() {
+		server.cancel()
+		_ = serverConn.Close()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Error("UDP receiver did not stop")
+		}
+	})
+	client, err := net.DialUDP("udp", nil, serverConn.LocalAddr().(*net.UDPAddr))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	for _, command := range []string{"-train\n", "-train 2455\n", "-save model1\n", "-list_type\n", "-del_type 1\n"} {
+		t.Run(strings.TrimSpace(command), func(t *testing.T) {
+			if _, err := client.Write([]byte(command)); err != nil {
+				t.Fatal(err)
+			}
+			if err := client.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			buf := make([]byte, 512)
+			n, err := client.Read(buf)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Unsupported commands follow the existing echo response.
+			if got := string(buf[:n]); got != command {
+				t.Fatalf("response = %q, want %q", got, command)
+			}
+		})
+	}
+}
+
 func TestDetectionUDPServerSendsSpectrumFrameForFFTCommand(t *testing.T) {
 	originalCfg := config.GetConfig()
 	cfg := config.DefaultConfig()
