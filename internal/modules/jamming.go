@@ -24,11 +24,36 @@ type JammingModule interface {
 
 type jammingClientSession struct {
 	mu       sync.RWMutex
+	writeMu  sync.Mutex
 	conn     net.Conn
 	ctx      context.Context
 	cancel   context.CancelFunc
-	lastSeen time.Time
 	isActive bool
+}
+
+func (s *jammingClientSession) activeConn() net.Conn {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if !s.isActive || s.ctx.Err() != nil {
+		return nil
+	}
+	return s.conn
+}
+
+func (s *jammingClientSession) write(data []byte) error {
+	// Serialize packets without holding the session lock during network I/O,
+	// so Stop can close the connection and interrupt a blocked read or write.
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	connection := s.activeConn()
+	if connection == nil {
+		return net.ErrClosed
+	}
+	if err := connection.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return err
+	}
+	_, err := connection.Write(data)
+	return err
 }
 
 type jamming struct {
@@ -81,8 +106,7 @@ func (j *jamming) Start() {
 	// 启动连接到多个服务端
 	wg.Go(j.connectToServers)
 
-	// 清理不活跃的连接
-	wg.Go(j.cleanupInactiveSessions)
+	// 无人值守允许长时间没有控制命令；连接由实际读写错误或 Stop 清理。
 
 	// 等待context取消信号
 	<-j.ctx.Done()
@@ -97,12 +121,14 @@ func (j *jamming) Start() {
 func (j *jamming) getOrCreateSession(serverAddr string) (*jammingClientSession, bool) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	if j.ctx.Err() != nil {
+		return nil, false
+	}
 
 	session, exists := j.clients[serverAddr]
 	if exists {
 		session.mu.Lock()
 		if session.isActive {
-			session.lastSeen = time.Now()
 			session.mu.Unlock()
 			return session, false
 		}
@@ -114,7 +140,6 @@ func (j *jamming) getOrCreateSession(serverAddr string) (*jammingClientSession, 
 	session = &jammingClientSession{
 		ctx:      ctx,
 		cancel:   cancel,
-		lastSeen: time.Now(),
 		isActive: true,
 	}
 	j.clients[serverAddr] = session
@@ -147,25 +172,13 @@ func (j *jamming) attachSessionConn(serverAddr string, session *jammingClientSes
 	session.mu.Lock()
 	j.mu.RUnlock()
 	defer session.mu.Unlock()
+	if !session.isActive || session.ctx.Err() != nil || j.ctx.Err() != nil {
+		return false
+	}
 
 	session.conn = conn
 	session.isActive = true
-	session.lastSeen = time.Now()
 	return true
-}
-
-func (j *jamming) touchSession(serverAddr string, session *jammingClientSession) {
-	j.mu.RLock()
-	current, exists := j.clients[serverAddr]
-	if !exists || current != session {
-		j.mu.RUnlock()
-		return
-	}
-
-	session.mu.Lock()
-	j.mu.RUnlock()
-	session.lastSeen = time.Now()
-	session.mu.Unlock()
 }
 
 // connectToServers 连接到配置的服务器
@@ -233,37 +246,6 @@ func (j *jamming) tryConnect() {
 	}
 }
 
-// cleanupInactiveSessions 清理不活跃的会话连接
-func (j *jamming) cleanupInactiveSessions() {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-j.ctx.Done():
-			return
-		case <-ticker.C:
-			j.mu.Lock()
-			for addr, session := range j.clients {
-				session.mu.Lock()
-				expired := time.Since(session.lastSeen) > 60*time.Second
-				if expired {
-					log.Printf("设备ID=%d [%s] 清理不活跃连接: %s", j.deviceId, j.title, addr)
-					session.isActive = false
-					session.cancel()
-					if session.conn != nil {
-						session.conn.Close()
-						session.conn = nil
-					}
-					delete(j.clients, addr)
-				}
-				session.mu.Unlock()
-			}
-			j.mu.Unlock()
-		}
-	}
-}
-
 // markSessionDisconnected 标记会话断开
 func (j *jamming) markSessionDisconnected(serverAddr string, session *jammingClientSession) {
 	j.mu.Lock()
@@ -320,21 +302,7 @@ func (j *jamming) handleReportData(serverAddr string, session *jammingClientSess
 				continue
 			}
 
-			// 使用锁保护连接访问
-			session.mu.Lock()
-			if !session.isActive || session.conn == nil {
-				session.mu.Unlock()
-				log.Printf("设备ID=%d [%s] 连接已失效，停止发送", j.deviceId, j.title)
-				j.markSessionDisconnected(serverAddr, session)
-				return
-			}
-
-			session.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			_, writeErr := session.conn.Write(data)
-			session.lastSeen = time.Now()
-			session.mu.Unlock()
-
-			if writeErr != nil {
+			if writeErr := session.write(data); writeErr != nil {
 				log.Printf("设备ID=%d [%s] 向 %s 发送数据失败: %v", j.deviceId, j.title, serverAddr, writeErr)
 				j.markSessionDisconnected(serverAddr, session)
 				return
@@ -345,36 +313,34 @@ func (j *jamming) handleReportData(serverAddr string, session *jammingClientSess
 
 // handleDataReception 处理接收与响应
 func (j *jamming) handleDataReception(serverAddr string, session *jammingClientSession) {
+	defer j.markSessionDisconnected(serverAddr, session)
 	buf := make([]byte, 2048)
 	for {
 		select {
 		case <-session.ctx.Done():
 			return
 		default:
-			session.mu.RLock()
-			if !session.isActive || session.conn == nil {
-				session.mu.RUnlock()
-				j.markSessionDisconnected(serverAddr, session)
+			connection := session.activeConn()
+			if connection == nil {
 				return
 			}
 
-			session.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-			n, err := session.conn.Read(buf)
-			session.mu.RUnlock()
+			if err := connection.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
+				log.Printf("设备ID=%d [%s] 设置 %s 读取期限失败: %v", j.deviceId, j.title, serverAddr, err)
+				return
+			}
+			n, err := connection.Read(buf)
 			if err != nil {
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 					continue
 				}
 				log.Printf("设备ID=%d [%s] 从 %s 读取数据失败: %v", j.deviceId, j.title, serverAddr, err)
-				j.markSessionDisconnected(serverAddr, session)
 				return
 			}
 
 			if n <= 0 {
 				continue
 			}
-
-			j.touchSession(serverAddr, session)
 
 			log.Printf("[打击] 设备ID=%d 从 %s 接收到 %d 字节数据", j.deviceId, serverAddr, n)
 
@@ -396,22 +362,8 @@ func (j *jamming) handleDataReception(serverAddr string, session *jammingClientS
 					continue
 				}
 
-				// 使用锁保护连接访问
-				session.mu.Lock()
-				if !session.isActive || session.conn == nil {
-					session.mu.Unlock()
-					log.Printf("设备ID=%d [%s] 连接已失效，停止发送响应", j.deviceId, j.title)
-					j.markSessionDisconnected(serverAddr, session)
-					return
-				}
-
-				session.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-				_, writeErr := session.conn.Write(data)
-				session.mu.Unlock()
-
-				if writeErr != nil {
+				if writeErr := session.write(data); writeErr != nil {
 					log.Printf("[打击] 设备ID=%d 向 %s 发送响应失败: %v", j.deviceId, serverAddr, writeErr)
-					j.markSessionDisconnected(serverAddr, session)
 					return
 				}
 				log.Printf("[打击] 设备ID=%d 向 %s 发送响应成功，响应长度: %d 字节", j.deviceId, serverAddr, len(data))
