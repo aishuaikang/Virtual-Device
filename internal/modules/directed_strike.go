@@ -127,6 +127,7 @@ type directedStrike struct {
 	lastError         string
 	signalSources     map[byte]bool
 	widebandConfigs   map[byte]directedStrikeFrequency
+	ampAttenuations   map[byte]byte
 	narrowbandAmps    map[byte]bool
 	ptz               directedStrikePTZ
 	random            *rand.Rand
@@ -153,6 +154,7 @@ func NewDirectedStrikeModule(listenAddress string, responseDelay time.Duration) 
 		connections:     make(map[net.Conn]string),
 		signalSources:   make(map[byte]bool, len(directedStrikeSourceAddresses)),
 		widebandConfigs: make(map[byte]directedStrikeFrequency),
+		ampAttenuations: make(map[byte]byte, len(directedStrikeSourceAddresses)),
 		narrowbandAmps:  make(map[byte]bool, len(directedStrikeNarrowbandAddresses)),
 		random:          rand.New(rand.NewSource(time.Now().UnixNano())),
 		ptz: directedStrikePTZ{
@@ -163,6 +165,7 @@ func NewDirectedStrikeModule(listenAddress string, responseDelay time.Duration) 
 	}
 	for _, address := range directedStrikeSourceAddresses {
 		module.signalSources[address] = false
+		module.ampAttenuations[address] = 0
 	}
 	for _, address := range directedStrikeNarrowbandAddresses {
 		module.narrowbandAmps[address] = false
@@ -390,6 +393,13 @@ func (module *directedStrike) handleFrame(frame protocol.DirectedStrikeFrame) ([
 	case protocol.DirectedCmdAmpStatusQuery:
 		responseData = module.ampStatusPayloadLocked(frame.DeviceAddr)
 		module.lastCommandDetail = fmt.Sprintf("查询 %s 功放状态", formatDirectedStrikeAddress(frame.DeviceAddr))
+	case protocol.DirectedCmdAmpAttenuation:
+		data, detail, err := module.handleAttenuationLocked(frame)
+		if err != nil {
+			return nil, err
+		}
+		responseData = data
+		module.lastCommandDetail = detail
 	case protocol.DirectedCmdSignalSource:
 		data, detail, err := module.handleSignalSourceLocked(frame.Data)
 		if err != nil {
@@ -476,6 +486,34 @@ func (module *directedStrike) handleFrame(frame protocol.DirectedStrikeFrame) ([
 		responses = append(responses, protocol.BuildDirectedStrikeResponse(frame.DeviceAddr, responseCommand, protocol.DirectedResponseSuccess, responseData))
 	}
 	return responses, nil
+}
+
+func (module *directedStrike) handleAttenuationLocked(frame protocol.DirectedStrikeFrame) ([]byte, string, error) {
+	if len(frame.Data) != 3 {
+		return nil, "", errors.New("invalid amplifier attenuation payload length")
+	}
+	address := frame.Data[1]
+	if !isDirectedStrikeSourceAddress(address) {
+		return nil, "", fmt.Errorf("unsupported attenuation source address: 0x%02X", address)
+	}
+	if address != frame.DeviceAddr {
+		return nil, "", errors.New("amplifier attenuation source does not match frame address")
+	}
+
+	switch frame.Data[0] {
+	case 0x00:
+		attenuation := module.ampAttenuations[address]
+		return []byte{0x00, attenuation}, fmt.Sprintf("读取 %s 功放 ATT=%d", formatDirectedStrikeAddress(address), attenuation), nil
+	case protocol.DirectedOperationPowerRetain:
+		attenuation := frame.Data[2]
+		if attenuation > 10 {
+			return nil, "", fmt.Errorf("amplifier attenuation must be between 0 and 10: %d", attenuation)
+		}
+		module.ampAttenuations[address] = attenuation
+		return []byte{address, attenuation}, fmt.Sprintf("写入并保存 %s 功放 ATT=%d", formatDirectedStrikeAddress(address), attenuation), nil
+	default:
+		return nil, "", fmt.Errorf("unsupported amplifier attenuation operation: 0x%02X", frame.Data[0])
+	}
 }
 
 func (module *directedStrike) handleSignalSourceLocked(data []byte) ([]byte, string, error) {
@@ -862,6 +900,8 @@ func directedStrikeCommandName(command byte) string {
 		return "心跳"
 	case protocol.DirectedCmdAmpStatusQuery:
 		return "功放状态查询"
+	case protocol.DirectedCmdAmpAttenuation:
+		return "功放 ATT 读写"
 	case protocol.DirectedCmdSignalSource:
 		return "信号源使能"
 	case protocol.DirectedCmdWriteFrequency:

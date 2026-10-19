@@ -1,5 +1,5 @@
 export namespace config {
-
+	
 	export class AnalysisConfig {
 	    enabled: boolean;
 	    deviceID: number;
@@ -8,11 +8,11 @@ export namespace config {
 	    port: number;
 	    empty_packet_probability: number;
 	    o3_plus_o4_data_file?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AnalysisConfig(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enabled = source["enabled"];
@@ -29,11 +29,11 @@ export namespace config {
 	    deviceID: number;
 	    hosts: string[];
 	    port: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new BaseConfig(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enabled = source["enabled"];
@@ -47,11 +47,11 @@ export namespace config {
 	    host: string;
 	    port: number;
 	    response_delay_ms: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DirectedStrikeConfig(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enabled = source["enabled"];
@@ -67,11 +67,11 @@ export namespace config {
 	    host: string;
 	    port: number;
 	    heartbeat_interval: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DetectionConfig(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enabled = source["enabled"];
@@ -85,11 +85,11 @@ export namespace config {
 	export class GPS {
 	    lat: number;
 	    lng: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new GPS(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.lat = source["lat"];
@@ -104,11 +104,11 @@ export namespace config {
 	    drone_gps: GPS;
 	    pilot_gps: GPS;
 	    type: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new PredefinedDrone(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.serial = source["serial"];
@@ -119,7 +119,7 @@ export namespace config {
 	        this.pilot_gps = this.convertValues(source["pilot_gps"], GPS);
 	        this.type = source["type"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -152,11 +152,11 @@ export namespace config {
 	    fpv: BaseConfig;
 	    jamming: BaseConfig;
 	    directed_strike: DirectedStrikeConfig;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.min_push_speed = source["min_push_speed"];
@@ -173,7 +173,7 @@ export namespace config {
 	        this.jamming = this.convertValues(source["jamming"], BaseConfig);
 	        this.directed_strike = this.convertValues(source["directed_strike"], DirectedStrikeConfig);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -192,14 +192,14 @@ export namespace config {
 		    return a;
 		}
 	}
-
-
-
+	
+	
+	
 
 }
 
 export namespace engine {
-
+	
 	export class ModuleStatus {
 	    name: string;
 	    connected: boolean;
@@ -207,11 +207,11 @@ export namespace engine {
 	    sentCount: number;
 	    lastActivityAt?: string;
 	    clientAddresses?: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ModuleStatus(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -227,11 +227,11 @@ export namespace engine {
 	    modules: ModuleStatus[];
 	    droneCount: number;
 	    directedStrike?: modules.DirectedStrikeSnapshot;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Status(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.running = source["running"];
@@ -239,7 +239,7 @@ export namespace engine {
 	        this.droneCount = source["droneCount"];
 	        this.directedStrike = this.convertValues(source["directedStrike"], modules.DirectedStrikeSnapshot);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -262,16 +262,16 @@ export namespace engine {
 }
 
 export namespace main {
-
+	
 	export class LocationSearchResult {
 	    displayName: string;
 	    lat: number;
 	    lng: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new LocationSearchResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.displayName = source["displayName"];
@@ -283,15 +283,15 @@ export namespace main {
 }
 
 export namespace modules {
-
+	
 	export class DirectedStrikeAmpStatus {
 	    address: string;
 	    enabled: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DirectedStrikeAmpStatus(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.address = source["address"];
@@ -303,11 +303,11 @@ export namespace modules {
 	    startFreqMHz: number;
 	    endFreqMHz: number;
 	    lastUpdatedAt?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DirectedStrikeFrequencyStatus(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.address = source["address"];
@@ -325,11 +325,11 @@ export namespace modules {
 	    locateHorizontalSpeed: number;
 	    locateVerticalSpeed: number;
 	    presetSaved: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DirectedStrikePTZStatus(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.horizontalAngle = source["horizontalAngle"];
@@ -345,11 +345,11 @@ export namespace modules {
 	export class DirectedStrikeSourceStatus {
 	    address: string;
 	    enabled: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DirectedStrikeSourceStatus(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.address = source["address"];
@@ -372,11 +372,11 @@ export namespace modules {
 	    widebandConfigs: DirectedStrikeFrequencyStatus[];
 	    narrowbandAmps: DirectedStrikeAmpStatus[];
 	    ptz: DirectedStrikePTZStatus;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DirectedStrikeSnapshot(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.listening = source["listening"];
@@ -395,7 +395,7 @@ export namespace modules {
 	        this.narrowbandAmps = this.convertValues(source["narrowbandAmps"], DirectedStrikeAmpStatus);
 	        this.ptz = this.convertValues(source["ptz"], DirectedStrikePTZStatus);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;

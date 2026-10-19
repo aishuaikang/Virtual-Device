@@ -85,6 +85,7 @@ func TestDirectedStrikeModuleProtocolFlow(t *testing.T) {
 		deviceAddress   byte
 		data            []byte
 		responseCommand byte
+		responseData    []byte
 	}{
 		{
 			name:            "heartbeat",
@@ -105,6 +106,34 @@ func TestDirectedStrikeModuleProtocolFlow(t *testing.T) {
 			deviceAddress:   0xFF,
 			data:            []byte{protocol.DirectedOperationPowerRetain, 0x05, 0x07, 0x08, 0x07, 0x08},
 			responseCommand: protocol.DirectedCmdWriteFrequency,
+		},
+		{
+			name: "read default attenuation", command: 0x24, deviceAddress: 0x02,
+			data: []byte{0x00, 0x02, 0x00}, responseCommand: 0x24, responseData: []byte{0x00, 0x00},
+		},
+		{
+			name: "set attenuation", command: 0x24, deviceAddress: 0x03,
+			data: []byte{0x01, 0x03, 0x05}, responseCommand: 0x24, responseData: []byte{0x03, 0x05},
+		},
+		{
+			name: "read back attenuation", command: 0x24, deviceAddress: 0x03,
+			data: []byte{0x00, 0x03, 0x00}, responseCommand: 0x24, responseData: []byte{0x00, 0x05},
+		},
+		{
+			name: "set maximum attenuation", command: 0x24, deviceAddress: 0x05,
+			data: []byte{0x01, 0x05, 0x0A}, responseCommand: 0x24, responseData: []byte{0x05, 0x0A},
+		},
+		{
+			name: "read another source independently", command: 0x24, deviceAddress: 0x02,
+			data: []byte{0x00, 0x02, 0x00}, responseCommand: 0x24, responseData: []byte{0x00, 0x00},
+		},
+		{
+			name: "set zero attenuation", command: 0x24, deviceAddress: 0x03,
+			data: []byte{0x01, 0x03, 0x00}, responseCommand: 0x24, responseData: []byte{0x03, 0x00},
+		},
+		{
+			name: "read back zero attenuation", command: 0x24, deviceAddress: 0x03,
+			data: []byte{0x00, 0x03, 0x00}, responseCommand: 0x24, responseData: []byte{0x00, 0x00},
 		},
 	}
 
@@ -131,6 +160,9 @@ func TestDirectedStrikeModuleProtocolFlow(t *testing.T) {
 			if response.Command != test.responseCommand || response.Response != protocol.DirectedResponseSuccess {
 				t.Fatalf("unexpected response: %#v", response)
 			}
+			if test.responseData != nil && (!bytes.Equal(response.Data, test.responseData) || response.DeviceAddr != test.deviceAddress) {
+				t.Fatalf("unexpected response address/payload: %#v, want address=%02X data=% X", response, test.deviceAddress, test.responseData)
+			}
 		})
 	}
 
@@ -138,7 +170,7 @@ func TestDirectedStrikeModuleProtocolFlow(t *testing.T) {
 	if snapshot.HeartbeatCount != 1 {
 		t.Fatalf("expected one heartbeat, got %d", snapshot.HeartbeatCount)
 	}
-	if snapshot.ReceivedFrames != 3 || snapshot.SentFrames != 3 {
+	if snapshot.ReceivedFrames != uint64(len(tests)) || snapshot.SentFrames != uint64(len(tests)) {
 		t.Fatalf("unexpected frame counts: rx=%d tx=%d", snapshot.ReceivedFrames, snapshot.SentFrames)
 	}
 	if len(snapshot.SignalSources) != 4 || !snapshot.SignalSources[3].Enabled {
@@ -146,6 +178,51 @@ func TestDirectedStrikeModuleProtocolFlow(t *testing.T) {
 	}
 	if len(snapshot.WidebandConfigs) != 1 || snapshot.WidebandConfigs[0].StartFreqMHz != 6800 {
 		t.Fatalf("unexpected frequency snapshot: %#v", snapshot.WidebandConfigs)
+	}
+}
+
+func TestDirectedStrikeModuleAttenuationRejectsInvalidRequests(t *testing.T) {
+	module, err := NewDirectedStrikeModule("127.0.0.1:0", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(module.Stop)
+	device := module.(*directedStrike)
+	tests := []struct {
+		name    string
+		address byte
+		data    []byte
+	}{
+		{name: "missing payload", address: 0x02},
+		{name: "short payload", address: 0x02, data: []byte{0x01, 0x02}},
+		{name: "long payload", address: 0x02, data: []byte{0x01, 0x02, 0x05, 0x00}},
+		{name: "invalid source", address: 0x01, data: []byte{0x01, 0x01, 0x05}},
+		{name: "source above range", address: 0x06, data: []byte{0x01, 0x06, 0x05}},
+		{name: "mismatched address", address: 0x02, data: []byte{0x01, 0x03, 0x05}},
+		{name: "attenuation above range", address: 0x02, data: []byte{0x01, 0x02, 0x0B}},
+		{name: "unknown operation", address: 0x02, data: []byte{0x02, 0x02, 0x05}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			responses, err := device.handleFrame(protocol.DirectedStrikeFrame{
+				Command: 0x24, DeviceAddr: tt.address, Data: tt.data,
+			})
+			if err == nil || len(responses) != 0 {
+				t.Fatalf("invalid request returned responses=% X error=%v", responses, err)
+			}
+		})
+	}
+	for _, address := range directedStrikeSourceAddresses {
+		responses, err := device.handleFrame(protocol.DirectedStrikeFrame{
+			Command: 0x24, DeviceAddr: address, Data: []byte{0x00, address, 0x00},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		response := parseSingleDirectedStrikeResponse(t, responses)
+		if !bytes.Equal(response.Data, []byte{0x00, 0x00}) {
+			t.Fatalf("invalid requests changed source %02X attenuation: % X", address, response.Data)
+		}
 	}
 }
 

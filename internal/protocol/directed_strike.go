@@ -21,6 +21,7 @@ const (
 	DirectedCmdPTZDown                byte = 0x10
 	DirectedCmdAmpStatusQuery         byte = 0x13
 	DirectedCmdSignalSource           byte = 0x21
+	DirectedCmdAmpAttenuation         byte = 0x24
 	DirectedCmdWriteFrequency         byte = 0x28
 	DirectedCmdNarrowbandAmpEnable    byte = 0x2C
 	DirectedCmdPTZHorizontalLocate    byte = 0x4B
