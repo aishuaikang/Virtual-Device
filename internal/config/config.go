@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,6 +63,18 @@ type DirectedStrikeConfig struct {
 	Host            string `json:"host"`
 	Port            int    `json:"port"`
 	ResponseDelayMS int    `json:"response_delay_ms"`
+}
+
+// PrecisionDFConfig configures the receiver's command and data TCP listeners.
+type PrecisionDFConfig struct {
+	Enabled     bool    `json:"enabled"`
+	Host        string  `json:"host"`
+	CommandPort int     `json:"command_port"`
+	DataPort    int     `json:"data_port"`
+	IntervalMS  int     `json:"interval_ms"`
+	BearingDeg  float64 `json:"bearing_deg"`
+	LevelDBUV   float64 `json:"level_dbuv"`
+	Quality     int     `json:"quality"`
 }
 
 func (c *BaseConfig) UnmarshalJSON(data []byte) error {
@@ -164,6 +177,7 @@ type Config struct {
 	FPV                        BaseConfig           `json:"fpv"`                            // FPV模块配置
 	Jamming                    BaseConfig           `json:"jamming"`                        // 干扰模块配置
 	DirectedStrike             DirectedStrikeConfig `json:"directed_strike"`                // 定向打击设备模拟器配置
+	PrecisionDF                PrecisionDFConfig    `json:"precision_df"`                   // 精准测向接收机模拟器配置
 }
 
 func normalizeOptionalString(value *string) *string {
@@ -224,6 +238,7 @@ func NormalizeConfig(cfg *Config) {
 	cfg.FPV.Hosts = normalizeHosts(cfg.FPV.Hosts)
 	cfg.Jamming.Hosts = normalizeHosts(cfg.Jamming.Hosts)
 	cfg.DirectedStrike.Host = strings.TrimSpace(cfg.DirectedStrike.Host)
+	cfg.PrecisionDF.Host = strings.TrimSpace(cfg.PrecisionDF.Host)
 	cfg.Analysis.O3PlusO4DataFile = normalizeOptionalString(cfg.Analysis.O3PlusO4DataFile)
 
 	if len(cfg.Detections) == 0 {
@@ -264,6 +279,7 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		FPV                        BaseConfig            `json:"fpv"`
 		Jamming                    BaseConfig            `json:"jamming"`
 		DirectedStrike             *DirectedStrikeConfig `json:"directed_strike"`
+		PrecisionDF                json.RawMessage       `json:"precision_df"`
 	}
 
 	type moduleCount struct {
@@ -288,6 +304,12 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		c.DirectedStrike = *raw.DirectedStrike
 	} else {
 		c.DirectedStrike = defaultDirectedStrikeConfig(false)
+	}
+	c.PrecisionDF = defaultPrecisionDFConfig()
+	if len(raw.PrecisionDF) > 0 {
+		if err := json.Unmarshal(raw.PrecisionDF, &c.PrecisionDF); err != nil {
+			return err
+		}
 	}
 
 	if len(raw.Analysis) > 0 {
@@ -474,6 +496,7 @@ func DefaultConfig() *Config {
 			Port:     10003,
 		},
 		DirectedStrike: defaultDirectedStrikeConfig(true),
+		PrecisionDF:    defaultPrecisionDFConfig(),
 	}
 	NormalizeConfig(cfg)
 	return cfg
@@ -485,6 +508,18 @@ func defaultDirectedStrikeConfig(enabled bool) DirectedStrikeConfig {
 		Host:            "0.0.0.0",
 		Port:            19000,
 		ResponseDelayMS: 0,
+	}
+}
+
+func defaultPrecisionDFConfig() PrecisionDFConfig {
+	return PrecisionDFConfig{
+		Host:        "0.0.0.0",
+		CommandPort: 10087,
+		DataPort:    10088,
+		IntervalMS:  200,
+		BearingDeg:  45,
+		LevelDBUV:   65,
+		Quality:     85,
 	}
 }
 
@@ -638,7 +673,35 @@ func validateConfig(config *Config) error {
 	if err := validateDirectedStrikeConfig(&config.DirectedStrike); err != nil {
 		return fmt.Errorf("定向打击模拟器配置错误: %v", err)
 	}
+	if err := validatePrecisionDFConfig(&config.PrecisionDF); err != nil {
+		return fmt.Errorf("精准测向模拟器配置错误: %v", err)
+	}
 
+	return nil
+}
+
+func validatePrecisionDFConfig(c *PrecisionDFConfig) error {
+	if !c.Enabled {
+		return nil
+	}
+	if c.Host == "" {
+		return fmt.Errorf("监听地址不能为空")
+	}
+	if c.CommandPort < 1 || c.CommandPort > 65535 || c.DataPort < 1 || c.DataPort > 65535 || c.CommandPort == c.DataPort {
+		return fmt.Errorf("指令与数据端口必须在1到65535之间且不能相同")
+	}
+	if c.IntervalMS < 20 || c.IntervalMS > 60000 {
+		return fmt.Errorf("数据间隔必须在20到60000毫秒之间")
+	}
+	if math.IsNaN(c.BearingDeg) || math.IsInf(c.BearingDeg, 0) || (c.BearingDeg != -1 && (c.BearingDeg < 0 || c.BearingDeg >= 360)) {
+		return fmt.Errorf("模拟方位必须为-1（无效角）或0到360度之间")
+	}
+	if math.IsNaN(c.LevelDBUV) || math.IsInf(c.LevelDBUV, 0) || c.LevelDBUV < -100 || c.LevelDBUV > 200 {
+		return fmt.Errorf("模拟电平必须在-100到200 dBμV之间")
+	}
+	if c.Quality < 0 || c.Quality > 100 {
+		return fmt.Errorf("测向质量必须在0到100之间")
+	}
 	return nil
 }
 

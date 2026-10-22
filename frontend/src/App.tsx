@@ -14,6 +14,7 @@ import { WindowSetTitle } from "../wailsjs/runtime/runtime";
 import ConfigEditor from "./components/ConfigEditor";
 import DirectedStrikePanel from "./components/DirectedStrikePanel";
 import ModuleStatus from "./components/ModuleStatus";
+import PrecisionDFPanel from "./components/PrecisionDFPanel";
 import OperationGuide from "./components/OperationGuide";
 import SceneSelector from "./components/SceneSelector";
 import "./App.css";
@@ -143,7 +144,13 @@ export default function App() {
     let cancelled = false;
 
     const tick = async () => {
-      if (cancelled || pollingRef.current) {
+      if (cancelled) {
+        return;
+      }
+      if (pollingRef.current) {
+        window.setTimeout(() => {
+          void tick();
+        }, 1500);
         return;
       }
 
@@ -173,7 +180,7 @@ export default function App() {
 
   useEffect(() => {
     const moduleLogPattern =
-      /\[(?:侦测模块_UDP服务|解析模块|FPV模块|干扰模块|定向打击)\]/;
+      /\[(?:侦测模块_UDP服务|解析模块|FPV模块|干扰模块|定向打击|精准测向)\]/;
     const activityPattern =
       /连接成功|新客户端连接|客户端已连接|客户端已断开|\b(?:RX|TX)\b|接收到来自|接收到数据|发送响应|发送侦测数据|发送告警数据|清理不活跃客户端|读取数据从 .* EOF/;
 
@@ -279,15 +286,20 @@ export default function App() {
   const directedConnections = status?.directedStrike?.activeConnections ?? 0;
   const directedListening = Boolean(status?.directedStrike?.listening);
   const directedEnabled = cfg.directed_strike?.enabled !== false;
+  const precisionEnabled = cfg.precision_df?.enabled === true;
   const totalConnections =
     status?.modules?.reduce(
       (total, module) => total + (module.connectionCount ?? 0),
       0,
     ) ?? 0;
-  const workflowConnections = directedEnabled
+  const workflowConnections = precisionEnabled
+    ? Number(Boolean(status?.precisionDF?.commandConnected && status?.precisionDF?.dataConnected))
+    : directedEnabled
     ? directedConnections
     : totalConnections;
-  const workflowListening = directedEnabled ? directedListening : running;
+  const workflowListening = precisionEnabled
+    ? Boolean(status?.precisionDF?.listening)
+    : directedEnabled ? directedListening : running;
   const runButtonLabel =
     engineAction === "starting"
       ? t("app.starting")
@@ -341,14 +353,14 @@ export default function App() {
             <span>
               {workflowConnections > 0
                 ? t(
-                    directedEnabled
+                    directedEnabled && !precisionEnabled
                       ? "app.directedClients"
                       : "app.activeConnections",
                     { count: workflowConnections },
                   )
                 : workflowListening
                   ? t(
-                      directedEnabled
+                      directedEnabled && !precisionEnabled
                         ? "app.waitingConnection"
                         : "app.waitingAnyConnection",
                     )
@@ -415,6 +427,9 @@ export default function App() {
         </main>
 
         <aside className="operations-panel">
+          {precisionEnabled && (
+            <PrecisionDFPanel cfg={cfg.precision_df} snapshot={status?.precisionDF} running={running} />
+          )}
           <DirectedStrikePanel
             config={cfg.directed_strike}
             snapshot={status?.directedStrike}

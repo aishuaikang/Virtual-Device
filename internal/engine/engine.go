@@ -29,6 +29,7 @@ type Status struct {
 	Modules        []ModuleStatus                  `json:"modules"`
 	DroneCount     int                             `json:"droneCount"`
 	DirectedStrike *modules.DirectedStrikeSnapshot `json:"directedStrike,omitempty"`
+	PrecisionDF    *modules.PrecisionDFSnapshot    `json:"precisionDF,omitempty"`
 }
 
 // Engine 统一管理所有模拟模块的生命周期
@@ -44,6 +45,7 @@ type Engine struct {
 	detections     []modules.DetectionUDPServerModule
 	jamming        modules.JammingModule
 	directedStrike modules.DirectedStrikeModule
+	precisionDF    *modules.PrecisionDFModule
 
 	analysisMock   mocks.MockDataGenerator
 	detectionMocks []mocks.MockDataGenerator
@@ -71,6 +73,7 @@ func (e *Engine) Start(cfg *config.Config) error {
 	e.detections = nil
 	e.jamming = nil
 	e.directedStrike = nil
+	e.precisionDF = nil
 
 	if cfg.Analysis.Enabled {
 		log.Printf("[Engine] 创建解析模块，设备ID=%d", cfg.Analysis.DeviceID)
@@ -117,6 +120,17 @@ func (e *Engine) Start(cfg *config.Config) error {
 		}
 		e.directedStrike = directedStrike
 	}
+	if cfg.PrecisionDF.Enabled {
+		precisionDF, err := modules.NewPrecisionDFModule(cfg.PrecisionDF, cfg.CenterPoint)
+		if err != nil {
+			if e.directedStrike != nil {
+				e.directedStrike.Stop()
+				e.directedStrike = nil
+			}
+			return fmt.Errorf("启动精准测向模拟器: %w", err)
+		}
+		e.precisionDF = precisionDF
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	e.ctx = ctx
@@ -147,6 +161,10 @@ func (e *Engine) Start(cfg *config.Config) error {
 	if e.directedStrike != nil {
 		e.wg.Add(1)
 		go func() { defer e.wg.Done(); e.directedStrike.Start() }()
+	}
+	if e.precisionDF != nil {
+		e.wg.Add(1)
+		go func() { defer e.wg.Done(); e.precisionDF.Start() }()
 	}
 
 	if cfg.RandomDroneRefreshInterval > 0 {
@@ -200,6 +218,9 @@ func (e *Engine) Stop() {
 	if e.directedStrike != nil {
 		e.directedStrike.Stop()
 	}
+	if e.precisionDF != nil {
+		e.precisionDF.Stop()
+	}
 	e.running = false
 
 	done := make(chan struct{})
@@ -231,6 +252,7 @@ func (e *Engine) GetStatus() Status {
 	detections := append([]modules.DetectionUDPServerModule(nil), e.detections...)
 	jamming := e.jamming
 	directedStrike := e.directedStrike
+	precisionDF := e.precisionDF
 	analysisMock := e.analysisMock
 	detectionMocks := append([]mocks.MockDataGenerator(nil), e.detectionMocks...)
 	e.mu.Unlock()
@@ -244,6 +266,7 @@ func (e *Engine) GetStatus() Status {
 				{Name: "fpv"},
 				{Name: "jamming"},
 				{Name: "directed_strike"},
+				{Name: "precision_df"},
 			},
 		}
 	}
@@ -294,17 +317,32 @@ func (e *Engine) GetStatus() Status {
 		directedStrikeStatus.LastActivityAt = snapshot.LastActivityAt
 		directedStrikeStatus.ClientAddresses = append([]string(nil), snapshot.ClientAddresses...)
 	}
+	var precisionDFSnapshot *modules.PrecisionDFSnapshot
+	precisionDFStatus := ModuleStatus{Name: "precision_df"}
+	if precisionDF != nil {
+		snapshot := precisionDF.Snapshot()
+		precisionDFSnapshot = &snapshot
+		precisionDFStatus.Connected = snapshot.CommandConnected && snapshot.DataConnected
+		if snapshot.CommandConnected {
+			precisionDFStatus.ConnectionCount = 1
+		}
+		precisionDFStatus.SentCount = int64(snapshot.SentFrames)
+		precisionDFStatus.LastActivityAt = snapshot.LastActivityAt
+		precisionDFStatus.ClientAddresses = snapshot.ClientAddresses
+	}
 
 	return Status{
 		Running:        true,
 		DroneCount:     droneCount,
 		DirectedStrike: directedStrikeSnapshot,
+		PrecisionDF:    precisionDFSnapshot,
 		Modules: []ModuleStatus{
 			{Name: "analysis", Connected: analysisCount > 0, ConnectionCount: analysisCount},
 			{Name: "detection", Connected: detectionCount > 0, ConnectionCount: detectionCount, LastActivityAt: detectionLastActivity, ClientAddresses: detectionClients},
 			{Name: "fpv", Connected: fpvCount > 0, ConnectionCount: fpvCount},
 			{Name: "jamming", Connected: jammingCount > 0, ConnectionCount: jammingCount},
 			directedStrikeStatus,
+			precisionDFStatus,
 		},
 	}
 }

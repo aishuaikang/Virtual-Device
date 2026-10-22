@@ -42,6 +42,32 @@ export namespace config {
 	        this.port = source["port"];
 	    }
 	}
+	export class PrecisionDFConfig {
+	    enabled: boolean;
+	    host: string;
+	    command_port: number;
+	    data_port: number;
+	    interval_ms: number;
+	    bearing_deg: number;
+	    level_dbuv: number;
+	    quality: number;
+
+	    static createFrom(source: any = {}) {
+	        return new PrecisionDFConfig(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.host = source["host"];
+	        this.command_port = source["command_port"];
+	        this.data_port = source["data_port"];
+	        this.interval_ms = source["interval_ms"];
+	        this.bearing_deg = source["bearing_deg"];
+	        this.level_dbuv = source["level_dbuv"];
+	        this.quality = source["quality"];
+	    }
+	}
 	export class DirectedStrikeConfig {
 	    enabled: boolean;
 	    host: string;
@@ -152,6 +178,7 @@ export namespace config {
 	    fpv: BaseConfig;
 	    jamming: BaseConfig;
 	    directed_strike: DirectedStrikeConfig;
+	    precision_df: PrecisionDFConfig;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -172,6 +199,7 @@ export namespace config {
 	        this.fpv = this.convertValues(source["fpv"], BaseConfig);
 	        this.jamming = this.convertValues(source["jamming"], BaseConfig);
 	        this.directed_strike = this.convertValues(source["directed_strike"], DirectedStrikeConfig);
+	        this.precision_df = this.convertValues(source["precision_df"], PrecisionDFConfig);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -195,6 +223,7 @@ export namespace config {
 	
 	
 	
+
 
 }
 
@@ -227,6 +256,7 @@ export namespace engine {
 	    modules: ModuleStatus[];
 	    droneCount: number;
 	    directedStrike?: modules.DirectedStrikeSnapshot;
+	    precisionDF?: modules.PrecisionDFSnapshot;
 	
 	    static createFrom(source: any = {}) {
 	        return new Status(source);
@@ -238,6 +268,7 @@ export namespace engine {
 	        this.modules = this.convertValues(source["modules"], ModuleStatus);
 	        this.droneCount = source["droneCount"];
 	        this.directedStrike = this.convertValues(source["directedStrike"], modules.DirectedStrikeSnapshot);
+	        this.precisionDF = this.convertValues(source["precisionDF"], modules.PrecisionDFSnapshot);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -413,6 +444,47 @@ export namespace modules {
 		    }
 		    return a;
 		}
+	}
+
+	export class PrecisionDFSnapshot {
+	    listening: boolean;
+	    commandAddress: string;
+	    dataAddress: string;
+	    commandConnected: boolean;
+	    dataConnected: boolean;
+	    clientAddresses: string[];
+	    running: boolean;
+	    mode: string;
+	    taskID: number;
+	    receivedCommands: number;
+	    sentFrames: number;
+	    iqBytes: number;
+	    lastCommand?: string;
+	    lastActivityAt?: string;
+	    lastError?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new PrecisionDFSnapshot(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.listening = source["listening"];
+	        this.commandAddress = source["commandAddress"];
+	        this.dataAddress = source["dataAddress"];
+	        this.commandConnected = source["commandConnected"];
+	        this.dataConnected = source["dataConnected"];
+	        this.clientAddresses = source["clientAddresses"];
+	        this.running = source["running"];
+	        this.mode = source["mode"];
+	        this.taskID = source["taskID"];
+	        this.receivedCommands = source["receivedCommands"];
+	        this.sentFrames = source["sentFrames"];
+	        this.iqBytes = source["iqBytes"];
+	        this.lastCommand = source["lastCommand"];
+	        this.lastActivityAt = source["lastActivityAt"];
+	        this.lastError = source["lastError"];
+	    }
 	}
 
 }

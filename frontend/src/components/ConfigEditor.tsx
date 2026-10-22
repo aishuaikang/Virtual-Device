@@ -830,6 +830,73 @@ export default function ConfigEditor({ cfg, onChange, disabled }: Props) {
         </Field>
       </Section>
 
+      <Section title={t("config.precisionDF")}>
+        <div className="simulator-section-intro">
+          <span className="simulator-section-kicker">TCP · SFDF / PSCAN2 / FFM IQ</span>
+          <span>{t("precisionDF.configHint")}</span>
+        </div>
+        <ToggleField
+          label={t("config.enabled")}
+          checked={cfg.precision_df?.enabled === true}
+          onChange={(checked) => set(["precision_df", "enabled"], checked)}
+          disabled={disabled}
+        />
+        <Field label={t("config.listenHost")}>
+          <IPInput
+            value={cfg.precision_df?.host ?? "0.0.0.0"}
+            onChange={(value) => set(["precision_df", "host"], value)}
+            localIPs={localIPs}
+            disabled={disabled}
+          />
+        </Field>
+        <div className="field-row">
+          <Field label={t("precisionDF.commandPort")}>
+            <ClearableNumberInput
+              value={cfg.precision_df?.command_port ?? 10087}
+              onValueChange={num(["precision_df", "command_port"])}
+              min={1} max={65535} disabled={disabled}
+            />
+          </Field>
+          <Field label={t("precisionDF.dataPort")}>
+            <ClearableNumberInput
+              value={cfg.precision_df?.data_port ?? 10088}
+              onValueChange={num(["precision_df", "data_port"])}
+              min={1} max={65535} disabled={disabled}
+            />
+          </Field>
+        </div>
+        <Field label={t("precisionDF.interval")}>
+          <ClearableNumberInput
+            value={cfg.precision_df?.interval_ms ?? 200}
+            onValueChange={num(["precision_df", "interval_ms"])}
+            min={20} max={60000} disabled={disabled}
+          />
+        </Field>
+        <Field label={t("precisionDF.bearing")}>
+          <ClearableNumberInput
+            value={cfg.precision_df?.bearing_deg ?? 45}
+            onValueChange={num(["precision_df", "bearing_deg"])}
+            min={-1} max={359.99} step={0.1} disabled={disabled}
+          />
+        </Field>
+        <div className="field-row">
+          <Field label={t("precisionDF.level")}>
+            <ClearableNumberInput
+              value={cfg.precision_df?.level_dbuv ?? 65}
+              onValueChange={num(["precision_df", "level_dbuv"])}
+              min={-100} max={200} disabled={disabled}
+            />
+          </Field>
+          <Field label={t("precisionDF.quality")}>
+            <ClearableNumberInput
+              value={cfg.precision_df?.quality ?? 85}
+              onValueChange={num(["precision_df", "quality"])}
+              min={0} max={100} disabled={disabled}
+            />
+          </Field>
+        </div>
+      </Section>
+
       <Section title={t("config.directedStrike")}>
         <div className="simulator-section-intro">
           <span className="simulator-section-kicker">TCP DEVICE</span>

@@ -7,6 +7,7 @@ const MODULES = [
   { key: "fpv", statusName: "fpv" },
   { key: "jamming", statusName: "jamming" },
   { key: "directedStrike", statusName: "directed_strike" },
+  { key: "precisionDF", statusName: "precision_df" },
 ] as const;
 
 type EngineAction = "starting" | "stopping" | null;
@@ -38,6 +39,8 @@ export default function ModuleStatus({ cfg, status, actionState }: Props) {
         return cfg?.jamming?.enabled !== false;
       case "directedStrike":
         return cfg?.directed_strike?.enabled !== false;
+      case "precisionDF":
+        return cfg?.precision_df?.enabled === true;
     }
   };
 
@@ -84,14 +87,14 @@ export default function ModuleStatus({ cfg, status, actionState }: Props) {
           const module = getModule(statusName);
           const enabled = isModuleEnabled(key);
           const connected = enabled && (module?.connected ?? false);
-          const directedListening =
-            key === "directedStrike" &&
+          const listening =
             running &&
-            Boolean(status?.directedStrike?.listening);
+            ((key === "directedStrike" && Boolean(status?.directedStrike?.listening)) ||
+              (key === "precisionDF" && Boolean(status?.precisionDF?.listening)));
           const connecting =
             enabled &&
             !connected &&
-            (actionState === "starting" || directedListening);
+            (actionState === "starting" || listening);
           const cardClass = !enabled
             ? "card-disabled"
             : connected
@@ -104,7 +107,7 @@ export default function ModuleStatus({ cfg, status, actionState }: Props) {
             : connected
               ? t("status.connected")
               : connecting
-                ? key === "directedStrike"
+                ? listening
                   ? t("status.listening")
                   : t("status.connecting")
                 : t("status.disconnected");

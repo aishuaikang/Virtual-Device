@@ -1,5 +1,7 @@
 # README
 
+精准测向设备的启用、连接和模拟范围见 [精准测向模拟说明](docs/precision-direction-finding.md)。
+
 ## About
 
 This is the official Wails React-TS template.

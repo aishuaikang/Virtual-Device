@@ -27,6 +27,9 @@ export default function OperationGuide({ cfg, status, actionState }: Props) {
   const running = status?.running ?? false;
   const directed = status?.directedStrike;
   const directedEnabled = cfg.directed_strike?.enabled !== false;
+  const precisionEnabled = cfg.precision_df?.enabled === true;
+  const receiver = status?.precisionDF;
+  const hasTCPDevice = precisionEnabled || directedEnabled;
 
   useEffect(() => {
     let active = true;
@@ -49,6 +52,7 @@ export default function OperationGuide({ cfg, status, actionState }: Props) {
     cfg.fpv?.enabled !== false,
     cfg.jamming?.enabled !== false,
     directedEnabled,
+    precisionEnabled,
   ].filter(Boolean).length;
   const totalConnections =
     status?.modules?.reduce(
@@ -56,22 +60,27 @@ export default function OperationGuide({ cfg, status, actionState }: Props) {
       0,
     ) ?? 0;
   const exchangedFrames =
-    (directed?.receivedFrames ?? 0) + (directed?.sentFrames ?? 0);
+    precisionEnabled
+      ? (receiver?.receivedCommands ?? 0) + (receiver?.sentFrames ?? 0)
+      : (directed?.receivedFrames ?? 0) + (directed?.sentFrames ?? 0);
   const directedConnections = directed?.activeConnections ?? 0;
   const anyConnected = totalConnections > 0;
-  const workflowConnections = directedEnabled
+  const workflowConnections = precisionEnabled
+    ? Number(Boolean(receiver?.commandConnected && receiver?.dataConnected))
+    : directedEnabled
     ? directedConnections
     : totalConnections;
   const connected = workflowConnections > 0;
-  const interacting = directedEnabled && exchangedFrames > 0;
-  const hasIssue = directedEnabled && Boolean(directed?.lastError);
-  const bindHost = cfg.directed_strike?.host?.trim() || "0.0.0.0";
-  const listenPort = cfg.directed_strike?.port || 19000;
+  const interacting = connected && hasTCPDevice && exchangedFrames > 0;
+  const lastError = precisionEnabled ? receiver?.lastError : directed?.lastError;
+  const hasIssue = hasTCPDevice && Boolean(lastError);
+  const bindHost = (precisionEnabled ? cfg.precision_df?.host : cfg.directed_strike?.host)?.trim() || "0.0.0.0";
+  const listenPort = precisionEnabled ? cfg.precision_df.command_port : cfg.directed_strike?.port || 19000;
   const connectHost = isWildcardHost(bindHost) ? localIPs[0] : bindHost;
   const endpoint = connectHost
     ? formatEndpoint(connectHost, listenPort)
     : t("overview.localEndpoint", { port: listenPort });
-  const directedReady = directedEnabled && Boolean(directed?.listening);
+  const deviceReady = precisionEnabled ? Boolean(receiver?.listening) : directedEnabled && Boolean(directed?.listening);
 
   const state = hasIssue
     ? "issue"
@@ -85,7 +94,7 @@ export default function OperationGuide({ cfg, status, actionState }: Props) {
   const stateLabel = t(`overview.state.${state}`);
   const heroTitle = t(`overview.hero.${state}Title`);
   const heroDetailKey =
-    state === "waiting" && !directedEnabled
+    state === "waiting" && !hasTCPDevice
       ? "overview.hero.waitingGenericDetail"
       : `overview.hero.${state}Detail`;
   const heroDetail = t(heroDetailKey, {
@@ -103,8 +112,8 @@ export default function OperationGuide({ cfg, status, actionState }: Props) {
     {
       number: "02",
       title: t("overview.steps.connectTitle"),
-      detail: directedEnabled
-        ? directedReady
+      detail: hasTCPDevice
+        ? deviceReady
           ? t("overview.steps.connectDetail", { endpoint })
           : t("overview.steps.connectPrepared", { endpoint })
         : t("overview.steps.connectGeneric"),
@@ -123,6 +132,7 @@ export default function OperationGuide({ cfg, status, actionState }: Props) {
     return cfg[key]?.enabled !== false;
   }).map((key) => t(`status.${key}`));
   if (directedEnabled) enabledModuleLabels.push(t("status.directedStrike"));
+  if (precisionEnabled) enabledModuleLabels.push(t("status.precisionDF"));
 
   return (
     <section className={`operation-guide is-${state}`}>
@@ -148,9 +158,9 @@ export default function OperationGuide({ cfg, status, actionState }: Props) {
         <div className="guide-hero-copy">
           <span>{t("overview.nextAction")}</span>
           <strong>{heroTitle}</strong>
-          <p>{hasIssue ? directed?.lastError : heroDetail}</p>
+          <p>{hasIssue ? lastError : heroDetail}</p>
         </div>
-        {directedReady && (
+        {deviceReady && (
           <div className="guide-endpoint">
             <span>TCP</span>
             <code>{endpoint}</code>
@@ -196,7 +206,7 @@ export default function OperationGuide({ cfg, status, actionState }: Props) {
         <article>
           <span>{t("overview.metrics.frames")}</span>
           <strong>{exchangedFrames}</strong>
-          <small>RX {directed?.receivedFrames ?? 0} · TX {directed?.sentFrames ?? 0}</small>
+          <small>RX {(precisionEnabled ? receiver?.receivedCommands : directed?.receivedFrames) ?? 0} · TX {(precisionEnabled ? receiver?.sentFrames : directed?.sentFrames) ?? 0}</small>
         </article>
       </div>
 
@@ -205,10 +215,12 @@ export default function OperationGuide({ cfg, status, actionState }: Props) {
         <div>
           <span>{t("overview.latest")}</span>
           <strong>
-            {directed?.lastCommand || t("overview.noInteraction")}
+            {(precisionEnabled ? receiver?.lastCommand : directed?.lastCommand) || t("overview.noInteraction")}
           </strong>
           <small>
-            {directed?.lastCommandDetail || t("overview.noInteractionDetail")}
+            {precisionEnabled && receiver?.taskID
+              ? t("precisionDF.taskSummary", { mode: receiver.mode, task: receiver.taskID })
+              : (precisionEnabled ? undefined : directed?.lastCommandDetail) || t("overview.noInteractionDetail")}
           </small>
         </div>
       </div>

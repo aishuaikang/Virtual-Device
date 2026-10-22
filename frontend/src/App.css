@@ -2494,6 +2494,32 @@ body {
     padding: 16px 14px 20px;
 }
 
+.precision-df-panel {
+    border-bottom: 1px solid var(--workbench-line);
+}
+
+.precision-df-links {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px 12px;
+    color: var(--workbench-muted);
+    font-size: 0.68rem;
+}
+
+.precision-df-links strong,
+.precision-df-links code {
+    text-align: right;
+    overflow-wrap: anywhere;
+    color: var(--workbench-ink);
+}
+
+.precision-df-command {
+    display: block;
+    overflow-wrap: anywhere;
+    font-size: 0.68rem;
+    color: var(--workbench-ink);
+}
+
 .operations-heading {
     display: flex;
     align-items: flex-start;

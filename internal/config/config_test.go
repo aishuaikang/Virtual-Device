@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 )
@@ -25,6 +26,61 @@ func TestValidateConfigNormalizesOptionalPaths(t *testing.T) {
 	}
 	if len(cfg.Analysis.Hosts) != 2 || cfg.Analysis.Hosts[0] != "127.0.0.1" || cfg.Analysis.Hosts[1] != "192.168.1.2" {
 		t.Fatalf("expected analysis hosts to be trimmed and empty items dropped, got %#v", cfg.Analysis.Hosts)
+	}
+}
+
+func TestPrecisionDFConfigDefaultsAndRoundTrip(t *testing.T) {
+	var legacy Config
+	if err := json.Unmarshal([]byte(`{"precision_df":null}`), &legacy); err != nil {
+		t.Fatal(err)
+	}
+	if legacy.PrecisionDF.Enabled || legacy.PrecisionDF.CommandPort != 10087 || legacy.PrecisionDF.DataPort != 10088 || legacy.PrecisionDF.IntervalMS != 200 {
+		t.Fatalf("invalid legacy defaults: %+v", legacy.PrecisionDF)
+	}
+	cfg := DefaultConfig()
+	cfg.PrecisionDF.Enabled = true
+	cfg.PrecisionDF.BearingDeg = 0
+	cfg.PrecisionDF.LevelDBUV = 0
+	cfg.PrecisionDF.Quality = 0
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored Config
+	if err := json.Unmarshal(raw, &restored); err != nil {
+		t.Fatal(err)
+	}
+	if restored.PrecisionDF != cfg.PrecisionDF {
+		t.Fatalf("config changed on scene round trip: %+v", restored.PrecisionDF)
+	}
+}
+
+func TestValidatePrecisionDFConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*PrecisionDFConfig)
+	}{
+		{"same port", func(c *PrecisionDFConfig) { c.DataPort = c.CommandPort }},
+		{"invalid port", func(c *PrecisionDFConfig) { c.CommandPort = 65536 }},
+		{"too fast", func(c *PrecisionDFConfig) { c.IntervalMS = 19 }},
+		{"invalid angle", func(c *PrecisionDFConfig) { c.BearingDeg = 360 }},
+		{"nonfinite angle", func(c *PrecisionDFConfig) { c.BearingDeg = math.NaN() }},
+		{"nonfinite level", func(c *PrecisionDFConfig) { c.LevelDBUV = math.Inf(1) }},
+		{"invalid quality", func(c *PrecisionDFConfig) { c.Quality = 101 }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.PrecisionDF.Enabled = true
+			tc.mutate(&cfg.PrecisionDF)
+			if err := ValidateConfig(cfg); err == nil {
+				t.Fatal("invalid precision DF config accepted")
+			}
+		})
+	}
+	cfg := DefaultConfig()
+	cfg.PrecisionDF.Enabled, cfg.PrecisionDF.BearingDeg = true, -1
+	if err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("invalid angle marker should be accepted: %v", err)
 	}
 }
 
