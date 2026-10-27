@@ -1,38 +1,31 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  DeleteScene,
   ExportScene,
+  GetDefaultConfig,
   ImportScene,
   ListScenes,
   LoadScene,
-  SaveScene,
-  DeleteScene,
   RenameScene,
+  SaveScene,
 } from "../../wailsjs/go/main/App";
 import { config } from "../../wailsjs/go/models";
 import { ClearableTextInput } from "./ClearableInput";
+import Icon from "./Icon";
+import Modal from "./Modal";
 
 interface Props {
   currentCfg: config.Config;
+  getCurrentConfig: () => Promise<config.Config | null>;
   onLoad: (cfg: config.Config) => void;
-  onToast: (msg: string, type: "success" | "error") => void;
+  onToast: (message: string, type: "success" | "error") => void;
   running: boolean;
-}
-
-function formatError(error: unknown) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-  return String(error);
-}
-
-function isCancelled(error: unknown) {
-  const message = formatError(error).toLowerCase();
-  return message.includes("已取消保存") || message.includes("cancel");
 }
 
 export default function SceneSelector({
   currentCfg,
+  getCurrentConfig,
   onLoad,
   onToast,
   running,
@@ -40,341 +33,304 @@ export default function SceneSelector({
   const { t } = useTranslation();
   const [scenes, setScenes] = useState<string[]>([]);
   const [selected, setSelected] = useState("");
-  const [open, setOpen] = useState(false);
-  const [renaming, setRenaming] = useState("");
-  const [newName, setNewName] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saveName, setSaveName] = useState("");
-  const [pendingDelete, setPendingDelete] = useState("");
-  const dropRef = useRef<HTMLDivElement>(null);
+  const [dialog, setDialog] = useState<
+    "save" | "manage" | "rename" | "delete" | "switch" | null
+  >(null);
+  const [name, setName] = useState("");
+  const [subject, setSubject] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [operationError, setOperationError] = useState("");
+  const baseline = useRef(JSON.stringify(currentCfg));
+  const dirty = JSON.stringify(currentCfg) !== baseline.current;
 
-  const closeSceneModal = () => {
-    setOpen(false);
-    setRenaming("");
-    setNewName("");
-    setPendingDelete("");
-  };
-
-  const refresh = async () => {
-    const list = await ListScenes();
-    setScenes(list ?? []);
-  };
-
-  const handleOpen = async () => {
-    await refresh();
-    setOpen(true);
-  };
-
-  const handleLoad = async (name: string) => {
-    if (running) return;
-    try {
-      const cfg = await LoadScene(name);
-      if (cfg) {
-        onLoad(cfg);
-        setSelected(name);
-      }
-      closeSceneModal();
-    } catch (error) {
-      onToast(`${t("error.loadSceneFailed")}: ${formatError(error)}`, "error");
-    }
-  };
-
-  const handleSave = async () => {
-    if (running || !saveName.trim()) return;
-    try {
-      await SaveScene(saveName.trim(), currentCfg);
-      setSelected(saveName.trim());
-      onToast(t("scene.saved"), "success");
-      await refresh();
-      setSaving(false);
-      setSaveName("");
-    } catch (error) {
-      if (!isCancelled(error)) {
-        onToast(`${t("error.saveFailed")}: ${formatError(error)}`, "error");
-      }
-    }
-  };
-
-  const handleImport = async () => {
-    if (running) return;
-    try {
-      const importedName = await ImportScene();
-      if (!importedName) return;
-
-      await refresh();
-      const importedCfg = await LoadScene(importedName);
-      if (importedCfg) {
-        onLoad(importedCfg);
-        setSelected(importedName);
-      }
-      closeSceneModal();
-      onToast(t("scene.imported", { name: importedName }), "success");
-    } catch (error) {
-      onToast(`${t("error.importFailed")}: ${formatError(error)}`, "error");
-    }
-  };
-
-  const handleDelete = async () => {
-    if (running || !pendingDelete) return;
-
-    try {
-      await DeleteScene(pendingDelete);
-      await refresh();
-      if (selected === pendingDelete) setSelected("");
-      onToast(t("scene.deleted"), "success");
-      setPendingDelete("");
-    } catch (error) {
-      onToast(`${t("error.deleteFailed")}: ${formatError(error)}`, "error");
-    }
-  };
-
-  const handleRename = async (oldName: string) => {
-    if (running) {
-      setRenaming("");
-      setNewName("");
-      return;
-    }
-    const trimmed = newName.trim();
-    if (!trimmed || trimmed === oldName) {
-      setRenaming("");
-      setNewName("");
-      return;
-    }
-    try {
-      await RenameScene(oldName, trimmed);
-      await refresh();
-      if (selected === oldName) setSelected(trimmed);
-      onToast(t("scene.renamed"), "success");
-      setRenaming("");
-      setNewName("");
-    } catch (error) {
-      onToast(`${t("error.renameFailed")}: ${formatError(error)}`, "error");
-    }
-  };
-
-  const handleExport = async (name: string) => {
-    try {
-      const exportPath = await ExportScene(name);
-      if (!exportPath) return;
-      onToast(t("scene.exported", { name }), "success");
-    } catch (error) {
-      onToast(`${t("error.exportFailed")}: ${formatError(error)}`, "error");
-    }
-  };
-
-  // 点击外部关闭下拉
+  const refresh = async () => setScenes((await ListScenes()) ?? []);
   useEffect(() => {
-    if (!open && !saving) return;
-    const handler = (e: MouseEvent) => {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
-        closeSceneModal();
+    void refresh().catch((error) => onToast(String(error), "error"));
+  }, []);
+  useEffect(() => setOperationError(""), [dialog]);
+
+  const perform = async (operation: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    setOperationError("");
+    try {
+      await operation();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/cancel|已取消/i.test(message)) {
+        if (dialog) setOperationError(message);
+        else onToast(message, "error");
       }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open, saving]);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const applyScene = (value: config.Config, sceneName: string) => {
+    const next = new config.Config(value);
+    baseline.current = JSON.stringify(next);
+    setSelected(sceneName);
+    onLoad(next);
+    setDialog(null);
+  };
+
+  const load = async (sceneName: string) => {
+    if (running) return;
+    const next = sceneName
+      ? await LoadScene(sceneName)
+      : await GetDefaultConfig();
+    applyScene(next, sceneName);
+  };
+
+  const requestLoad = (sceneName: string) => {
+    if (running) return;
+    if (dirty) {
+      setSubject(sceneName);
+      setDialog("switch");
+    } else void perform(() => load(sceneName));
+  };
+
+  const save = async () => {
+    if (running || !name.trim()) return;
+    const latest = await getCurrentConfig();
+    if (!latest) return;
+    await SaveScene(name.trim(), latest);
+    baseline.current = JSON.stringify(latest);
+    setSelected(name.trim());
+    await refresh();
+    setDialog(null);
+    onToast(t("scene.saved"), "success");
+  };
+
+  const importScene = async () => {
+    if (running) return;
+    const imported = await ImportScene();
+    if (!imported) return;
+    await refresh();
+    if (dirty) {
+      setSubject(imported);
+      setDialog("switch");
+    } else await load(imported);
+  };
+
+  const rename = async () => {
+    if (running || !name.trim()) return;
+    await RenameScene(subject, name.trim());
+    if (selected === subject) setSelected(name.trim());
+    await refresh();
+    setDialog("manage");
+  };
+
+  const remove = async () => {
+    if (running) return;
+    await DeleteScene(subject);
+    if (selected === subject) setSelected("");
+    await refresh();
+    setDialog("manage");
+  };
+
+  const close = () => {
+    if (!busy) setDialog(null);
+  };
+  const titles = {
+    save: t("scene.save"),
+    manage: t("scene.manage"),
+    rename: t("scene.rename"),
+    delete: t("scene.delete"),
+    switch: t("scene.switch"),
+  };
 
   return (
-    <div className="scene-selector" ref={dropRef}>
-      <div className="scene-btn-group">
-        <button
-          type="button"
-          className="btn btn-secondary scene-main-btn"
-          onClick={handleOpen}
-        >
-          {t("scene.label")}
-          {selected ? `: ${selected}` : ""}
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary scene-save-btn"
-          title={t("scene.save")}
-          disabled={running}
-          onClick={() => {
-            setSaving(true);
-            setSaveName(selected || "");
-          }}
-        >
-          &#x1F4BE;
-        </button>
-      </div>
-
-      {saving && (
-        <div className="modal-overlay" onClick={() => setSaving(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>{t("scene.saveAs")}</h3>
-            <ClearableTextInput
-              autoFocus
-              value={saveName}
-              onValueChange={setSaveName}
-              placeholder={t("scene.newName")}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSave();
-                if (e.key === "Escape") setSaving(false);
+    <div className="scene-selector">
+      <select
+        className="scene-select"
+        aria-label={t("scene.label")}
+        value={selected}
+        disabled={running || busy}
+        onChange={(event) => requestLoad(event.target.value)}
+      >
+        <option value="">
+          {t("scene.default")}
+          {dirty && selected === "" ? " *" : ""}
+        </option>
+        {scenes.map((scene) => (
+          <option key={scene} value={scene}>
+            {scene}
+            {dirty && selected === scene ? " *" : ""}
+          </option>
+        ))}
+      </select>
+      <button
+        className="icon-button"
+        title={t("scene.save")}
+        aria-label={t("scene.save")}
+        disabled={running || busy}
+        onClick={() => {
+          setName(selected);
+          setDialog("save");
+        }}
+      >
+        <Icon name="save" />
+      </button>
+      <button
+        className="icon-button"
+        title={t("scene.manage")}
+        aria-label={t("scene.manage")}
+        disabled={busy}
+        onClick={() =>
+          void perform(async () => {
+            await refresh();
+            setDialog("manage");
+          })
+        }
+      >
+        <Icon name="more" />
+      </button>
+      {dialog && (
+        <Modal title={titles[dialog]} onClose={close}>
+          {operationError && (
+            <p className="dialog-error inline-error" role="alert">
+              {operationError}
+            </p>
+          )}
+          {(dialog === "save" || dialog === "rename") && (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void perform(dialog === "save" ? save : rename);
               }}
-            />
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleSave}
-              >
-                {t("scene.save")}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setSaving(false)}
-              >
-                {t("app.cancel")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {pendingDelete && (
-        <div
-          className="modal-overlay modal-overlay-front"
-          onClick={() => setPendingDelete("")}
-        >
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>{t("scene.delete")}</h3>
-            <div className="scene-confirm-text">
-              {t("scene.confirmDelete", { name: pendingDelete })}
-            </div>
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => void handleDelete()}
-              >
-                {t("scene.delete")}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setPendingDelete("")}
-              >
-                {t("app.cancel")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {open && (
-        <div className="modal-overlay" onClick={closeSceneModal}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>{t("scene.label")}</h3>
-            {running && (
-              <div className="scene-hint">{t("scene.runningLocked")}</div>
-            )}
-            {scenes.length === 0 ? (
-              <div className="scene-empty">{t("scene.empty")}</div>
-            ) : (
-              <ul className="scene-list">
-                {scenes.map((name) => (
-                  <li
-                    key={name}
-                    className={`scene-item${selected === name ? " scene-item-active" : ""}`}
+            >
+              <div className="dialog-body">
+                <ClearableTextInput
+                  autoFocus
+                  value={name}
+                  onValueChange={setName}
+                  aria-label={t("scene.name")}
+                  placeholder={t("scene.name")}
+                  disabled={busy}
+                  required
+                />
+              </div>
+              <footer className="dialog-actions">
+                <button
+                  type="button"
+                  className="button"
+                  onClick={close}
+                  disabled={busy}
+                >
+                  {t("app.cancel")}
+                </button>
+                <button
+                  className="button button-primary"
+                  disabled={busy || !name.trim()}
+                >
+                  {t(dialog === "save" ? "scene.save" : "app.confirm")}
+                </button>
+              </footer>
+            </form>
+          )}
+          {dialog === "manage" && (
+            <>
+              <div className="scene-list dialog-body">
+                <div className="scene-row">
+                  <button
+                    className={`scene-name${selected === "" ? " is-current" : ""}`}
+                    disabled={running || busy}
+                    onClick={() => requestLoad("")}
                   >
-                    {renaming === name && !running ? (
-                      <>
-                        <ClearableTextInput
-                          autoFocus
-                          value={newName}
-                          onValueChange={setNewName}
-                          containerClassName="scene-rename-input"
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") void handleRename(name);
-                            if (e.key === "Escape") {
-                              setRenaming("");
-                              setNewName("");
-                            }
-                          }}
-                        />
-                        <div className="scene-actions">
-                          <button
-                            type="button"
-                            className="btn-sm"
-                            onClick={() => void handleRename(name)}
-                          >
-                            {t("app.confirm")}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-sm btn-danger"
-                            onClick={() => {
-                              setRenaming("");
-                              setNewName("");
-                            }}
-                          >
-                            {t("app.cancel")}
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        className="scene-name-btn"
-                        disabled={running}
-                        onClick={() => handleLoad(name)}
-                      >
-                        {name}
-                      </button>
-                    )}
-                    <div className="scene-actions">
-                      <button
-                        type="button"
-                        className="btn-sm"
-                        onClick={() => handleExport(name)}
-                      >
-                        {t("scene.export")}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-sm"
-                        disabled={running}
-                        onClick={() => {
-                          setRenaming(name);
-                          setNewName(name);
-                        }}
-                      >
-                        {t("scene.rename")}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-sm btn-danger"
-                        disabled={running}
-                        onClick={() => setPendingDelete(name)}
-                      >
-                        {t("scene.delete")}
-                      </button>
-                    </div>
-                  </li>
+                    {t("scene.default")}
+                  </button>
+                </div>
+                {scenes.map((scene) => (
+                  <div className="scene-row" key={scene}>
+                    <button
+                      className={`scene-name${scene === selected ? " is-current" : ""}`}
+                      disabled={running || busy}
+                      onClick={() => requestLoad(scene)}
+                    >
+                      {scene}
+                    </button>
+                    <button
+                      className="button button-quiet"
+                      disabled={running || busy}
+                      onClick={() => {
+                        setSubject(scene);
+                        setName(scene);
+                        setDialog("rename");
+                      }}
+                    >
+                      {t("scene.rename")}
+                    </button>
+                    <button
+                      className="icon-button"
+                      disabled={busy}
+                      title={t("scene.export")}
+                      aria-label={`${t("scene.export")} ${scene}`}
+                      onClick={() =>
+                        void perform(async () => {
+                          await ExportScene(scene);
+                        })
+                      }
+                    >
+                      <Icon name="download" />
+                    </button>
+                    <button
+                      className="icon-button danger"
+                      disabled={running || busy}
+                      title={t("scene.delete")}
+                      aria-label={`${t("scene.delete")} ${scene}`}
+                      onClick={() => {
+                        setSubject(scene);
+                        setDialog("delete");
+                      }}
+                    >
+                      <Icon name="trash" />
+                    </button>
+                  </div>
                 ))}
-              </ul>
-            )}
-            <div className="scene-modal-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={running}
-                onClick={() => void handleImport()}
-              >
-                {t("scene.import")}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={closeSceneModal}
-              >
-                {t("app.close")}
-              </button>
-            </div>
-          </div>
-        </div>
+              </div>
+              <footer className="dialog-actions">
+                <button
+                  className="button"
+                  disabled={running || busy}
+                  onClick={() => void perform(importScene)}
+                >
+                  {t("scene.import")}
+                </button>
+                <button className="button" onClick={close} disabled={busy}>
+                  {t("app.close")}
+                </button>
+              </footer>
+            </>
+          )}
+          {(dialog === "delete" || dialog === "switch") && (
+            <>
+              <div className="dialog-body">
+                <p>
+                  {dialog === "delete"
+                    ? t("scene.confirmDelete", { name: subject })
+                    : t("scene.confirmSwitch")}
+                </p>
+              </div>
+              <footer className="dialog-actions">
+                <button className="button" onClick={close} disabled={busy}>
+                  {t("app.cancel")}
+                </button>
+                <button
+                  className={`button ${dialog === "delete" ? "button-danger" : "button-primary"}`}
+                  disabled={busy || running}
+                  onClick={() =>
+                    void perform(
+                      dialog === "delete" ? remove : () => load(subject),
+                    )
+                  }
+                >
+                  {t(dialog === "delete" ? "scene.delete" : "scene.switch")}
+                </button>
+              </footer>
+            </>
+          )}
+        </Modal>
       )}
     </div>
   );

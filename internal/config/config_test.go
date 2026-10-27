@@ -169,6 +169,43 @@ func TestLegacyDetectionConfigPopulatesDetections(t *testing.T) {
 	}
 }
 
+func TestLegacyDroneCountMigration(t *testing.T) {
+	cases := []struct {
+		name       string
+		detection  string
+		detections string
+		want       []int
+	}{
+		{"single device inherits total", `{}`, `[]`, []int{3}},
+		{"single device keeps zero", `{"drone_count":0}`, `[]`, []int{0}},
+		{"single device keeps count", `{"drone_count":5}`, `[]`, []int{5}},
+		{"device list takes precedence", `{"drone_count":99}`, `[{"drone_count":0},{}]`, []int{0, 3}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := `{"drone_count":2,"predefined_drones":[{}],"analysis":{},"detection":` + tc.detection + `,"detections":` + tc.detections + `}`
+			var cfg Config
+			if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Analysis.DroneCount != 3 {
+				t.Errorf("analysis count = %d, want 3", cfg.Analysis.DroneCount)
+			}
+			if len(cfg.Detections) != len(tc.want) {
+				t.Fatalf("detection count = %d, want %d", len(cfg.Detections), len(tc.want))
+			}
+			for i, want := range tc.want {
+				if cfg.Detections[i].DroneCount != want {
+					t.Errorf("detections[%d] drone count = %d, want %d", i, cfg.Detections[i].DroneCount, want)
+				}
+			}
+			if cfg.Detection.DroneCount != tc.want[0] {
+				t.Errorf("legacy detection drone count = %d, want %d", cfg.Detection.DroneCount, tc.want[0])
+			}
+		})
+	}
+}
+
 func TestValidateConfigRejectsDuplicateDetectionListenAddress(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Detections[1].Host = cfg.Detections[0].Host

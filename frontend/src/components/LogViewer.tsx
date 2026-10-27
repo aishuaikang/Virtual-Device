@@ -1,253 +1,133 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { ClearableTextInput } from "./ClearableInput";
-
-const TIMESTAMP_RE = /^\d{2}:\d{2}:\d{2}\.\d{6}$/;
-const IP_RE = /^(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?$/;
-const HEX_RE = /^0x[0-9A-Fa-f]+$/;
-const LOG_TOKEN_RE =
-  /\d{2}:\d{2}:\d{2}\.\d{6}|\[[^\]]+\]|\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b|0x[0-9A-Fa-f]+/g;
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function lineClass(line: string) {
-  if (
-    line.includes("[ERROR]") ||
-    line.includes("ERROR") ||
-    line.includes("失败") ||
-    line.includes("错误") ||
-    line.includes("异常") ||
-    line.includes("超时")
-  )
-    return "log-line log-line-error";
-  if (line.includes("[WARN]") || line.includes("WARN") || line.includes("警告"))
-    return "log-line log-line-warn";
-  if (
-    line.includes("[INFO]") ||
-    line.includes("INFO") ||
-    line.includes("成功") ||
-    line.includes("启动") ||
-    line.includes("停止")
-  )
-    return "log-line log-line-info";
-  return "log-line";
-}
-
-function tokenClass(token: string) {
-  if (TIMESTAMP_RE.test(token)) return "log-token-time";
-  if (IP_RE.test(token)) return "log-token-addr";
-  if (HEX_RE.test(token)) return "log-token-hex";
-  if (token.startsWith("[") && token.endsWith("]")) {
-    const upper = token.toUpperCase();
-    if (
-      upper.includes("ERROR") ||
-      token.includes("失败") ||
-      token.includes("错误") ||
-      token.includes("异常")
-    ) {
-      return "log-token-level-error";
-    }
-    if (upper.includes("WARN") || token.includes("警告")) {
-      return "log-token-level-warn";
-    }
-    if (upper.includes("INFO")) {
-      return "log-token-level-info";
-    }
-    return "log-token-tag";
-  }
-  return "";
-}
-
-function highlightText(
-  text: string,
-  filter: string,
-  keyPrefix: string,
-): ReactNode[] {
-  if (!filter) return [text];
-
-  const matches = [...text.matchAll(new RegExp(escapeRegExp(filter), "gi"))];
-  if (matches.length === 0) return [text];
-
-  const nodes: ReactNode[] = [];
-  let cursor = 0;
-
-  matches.forEach((match, index) => {
-    const start = match.index ?? 0;
-    const end = start + match[0].length;
-
-    if (start > cursor) {
-      nodes.push(text.slice(cursor, start));
-    }
-    nodes.push(
-      <mark key={`${keyPrefix}-${index}`} className="log-highlight">
-        {text.slice(start, end)}
-      </mark>,
-    );
-    cursor = end;
-  });
-
-  if (cursor < text.length) {
-    nodes.push(text.slice(cursor));
-  }
-
-  return nodes;
-}
-
-function renderLine(line: string, filter: string) {
-  const tokens: ReactNode[] = [];
-  let lastIndex = 0;
-
-  for (const match of line.matchAll(LOG_TOKEN_RE)) {
-    const token = match[0];
-    const index = match.index ?? 0;
-
-    if (index > lastIndex) {
-      tokens.push(
-        ...highlightText(
-          line.slice(lastIndex, index),
-          filter,
-          `plain-${lastIndex}`,
-        ),
-      );
-    }
-
-    const className = tokenClass(token);
-    const content = highlightText(token, filter, `token-${index}`);
-    tokens.push(
-      className ? (
-        <span key={`token-${index}`} className={className}>
-          {content}
-        </span>
-      ) : (
-        <span key={`token-${index}`}>{content}</span>
-      ),
-    );
-
-    lastIndex = index + token.length;
-  }
-
-  if (lastIndex < line.length) {
-    tokens.push(
-      ...highlightText(line.slice(lastIndex), filter, `plain-${lastIndex}`),
-    );
-  }
-
-  return tokens;
-}
-
-function formatExportTimestamp(date: Date) {
-  return date
-    .toISOString()
-    .replace(/\.\d{3}Z$/, "")
-    .replace("T", "_")
-    .replace(/:/g, "-");
-}
+import Icon from "./Icon";
 
 export default function LogViewer() {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
   const [lines, setLines] = useState<string[]>([]);
   const [filter, setFilter] = useState("");
-  const [atBottom, setAtBottom] = useState(true);
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const userScrolled = useRef(false);
+  const [follow, setFollow] = useState(true);
+  const pending = useRef<string[]>([]);
+  const body = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const cancel = EventsOn("log", (line: string) => {
-      setLines((prev) => {
-        const next = [...prev, line];
-        return next.length > 2000 ? next.slice(-2000) : next;
-      });
+      pending.current.push(line);
+      if (pending.current.length > 2000)
+        pending.current.splice(0, pending.current.length - 2000);
     });
-    return cancel;
-  }, []);
-
-  useEffect(() => {
-    if (!userScrolled.current) {
-      const container = bodyRef.current;
-      if (container) {
-        container.scrollTop = container.scrollHeight;
-      }
-    }
-  }, [lines]);
-
-  useEffect(() => {
-    const el = bodyRef.current;
-    if (!el) return;
-    const onScroll = () => {
-      const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-      userScrolled.current = !isAtBottom;
-      setAtBottom(isAtBottom);
+    const timer = window.setInterval(() => {
+      if (!pending.current.length) return;
+      const next = pending.current;
+      pending.current = [];
+      setLines((current) => [...current, ...next].slice(-2000));
+    }, 150);
+    return () => {
+      cancel();
+      window.clearInterval(timer);
     };
-    el.addEventListener("scroll", onScroll);
-    return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  const handleClear = () => setLines([]);
+  useEffect(() => {
+    if (open && follow && body.current)
+      body.current.scrollTop = body.current.scrollHeight;
+  }, [open, follow, lines, filter]);
 
-  const handleExport = () => {
-    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `vd-log-${formatExportTimestamp(new Date())}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const exportLogs = () => {
+    const url = URL.createObjectURL(
+      new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `simulator-${new Date().toISOString().replace(/[:.]/g, "-")}.log`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-
-  const scrollToBottom = () => {
-    userScrolled.current = false;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
   const filtered = filter
-    ? lines.filter((l) => l.toLowerCase().includes(filter.toLowerCase()))
+    ? lines.filter((line) => line.toLowerCase().includes(filter.toLowerCase()))
     : lines;
 
   return (
-    <div className="log-viewer">
-      <div className="log-header">
-        <span className="panel-title">{t("log.title")}</span>
-        <ClearableTextInput
-          containerClassName="log-filter-wrap"
-          className="log-filter"
-          value={filter}
-          onValueChange={setFilter}
-          placeholder={t("log.filter")}
-        />
-        <div className="log-actions">
-          <button onClick={handleExport} className="btn-sm">
-            {t("log.export")}
-          </button>
-          <button onClick={handleClear} className="btn-sm btn-danger">
-            {t("log.clear")}
-          </button>
-        </div>
-      </div>
-      <div className="log-container">
-        <div className="log-body" ref={bodyRef}>
-          {filtered.length === 0 ? (
-            <span className="log-placeholder">
-              {filter ? t("log.noMatch") : t("log.placeholder")}
-            </span>
-          ) : (
-            filtered.map((line, i) => (
-              <div key={i} className={lineClass(line)}>
-                {renderLine(line, filter)}
-              </div>
-            ))
-          )}
-          <div ref={bottomRef} />
-        </div>
-        {!atBottom && (
-          <button className="log-scroll-btn" onClick={scrollToBottom}>
-            {t("log.scrollBottom")}
-          </button>
+    <section className={`log-drawer${open ? " is-open" : ""}`}>
+      <div className="log-toolbar">
+        <button
+          className="log-toggle"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          aria-controls="log-output"
+        >
+          <Icon name="log" />
+          {t("log.title")}
+          <span className="count">{lines.length}</span>
+          <Icon className="log-chevron" name="chevron" />
+        </button>
+        {open && (
+          <>
+            <ClearableTextInput
+              containerClassName="log-filter"
+              aria-label={t("log.filter")}
+              placeholder={t("log.filter")}
+              value={filter}
+              onValueChange={setFilter}
+            />
+            <label className="log-follow">
+              <input
+                type="checkbox"
+                checked={follow}
+                onChange={(event) => setFollow(event.target.checked)}
+              />
+              {t("log.follow")}
+            </label>
+            <button
+              className="icon-button"
+              onClick={exportLogs}
+              disabled={!lines.length}
+              title={t("log.export")}
+              aria-label={t("log.export")}
+            >
+              <Icon name="download" />
+            </button>
+            <button
+              className="icon-button"
+              title={t("app.clear")}
+              aria-label={t("log.clear")}
+              onClick={() => {
+                pending.current = [];
+                setLines([]);
+              }}
+              disabled={!lines.length}
+            >
+              <Icon name="trash" />
+            </button>
+          </>
         )}
       </div>
-    </div>
+      {open && (
+        <div className="log-output" id="log-output" ref={body}>
+          {filtered.map((line, index) => (
+            <div
+              key={index}
+              className={
+                /ERROR|失败|错误|异常|超时/.test(line)
+                  ? "log-line log-error"
+                  : /WARN|警告/.test(line)
+                    ? "log-line log-warn"
+                    : "log-line"
+              }
+            >
+              {line}
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <span className="log-empty">
+              {t(filter ? "log.noMatch" : "log.empty")}
+            </span>
+          )}
+        </div>
+      )}
+    </section>
   );
 }

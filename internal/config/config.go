@@ -333,8 +333,6 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 			}
 			c.Detections = append(c.Detections, detection)
 		}
-	} else if len(raw.Detection) > 0 {
-		c.Detections = []DetectionConfig{c.Detection}
 	}
 
 	if raw.LegacyDroneCount != nil {
@@ -357,6 +355,9 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		}
 	}
 
+	if len(raw.Detections) == 0 && len(raw.Detection) > 0 {
+		c.Detections = []DetectionConfig{c.Detection}
+	}
 	if len(c.Detections) > 0 {
 		c.Detection = c.Detections[0]
 	}
