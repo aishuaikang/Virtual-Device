@@ -2,7 +2,7 @@ export namespace config {
 	
 	export class AnalysisConfig {
 	    enabled: boolean;
-	    deviceID: number;
+	    deviceID: string;
 	    drone_count: number;
 	    hosts: string[];
 	    port: number;

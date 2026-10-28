@@ -3,9 +3,79 @@ package config
 import (
 	"encoding/json"
 	"math"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestAnalysisDeviceIDsConfigRoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		deviceID string
+		wantIDs  []int
+	}{
+		{"legacy numeric ID", `2222`, []int{2222}},
+		{"single ID", `"2222"`, []int{2222}},
+		{"multiple IDs", `"2222,3333"`, []int{2222, 3333}},
+		{"surrounding spaces", `" 2222 , 3333 "`, []int{2222, 3333}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			raw := `{"deviceID":` + tc.deviceID + `,"drone_count":3,"hosts":["127.0.0.1"],"port":10002}`
+			if err := json.Unmarshal([]byte(raw), &cfg.Analysis); err != nil {
+				t.Fatalf("unmarshal analysis config: %v", err)
+			}
+			if err := ValidateConfig(cfg); err != nil {
+				t.Fatalf("validate analysis config: %v", err)
+			}
+			if got, err := cfg.Analysis.DeviceIDs(); err != nil || !reflect.DeepEqual(got, tc.wantIDs) {
+				t.Fatalf("device IDs = %v, %v; want %v", got, err, tc.wantIDs)
+			}
+			encoded, err := json.Marshal(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var restored Config
+			if err := json.Unmarshal(encoded, &restored); err != nil {
+				t.Fatalf("restore config: %v", err)
+			}
+			if !reflect.DeepEqual(restored.Analysis, cfg.Analysis) {
+				t.Fatalf("analysis config changed after round trip: %+v, want %+v", restored.Analysis, cfg.Analysis)
+			}
+		})
+	}
+}
+
+func TestAnalysisDeviceIDsConfigRejectsInvalidIDs(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		deviceID string
+	}{
+		{"empty", ""},
+		{"zero", "2222,0"},
+		{"negative", "2222,-1"},
+		{"non-numeric", "2222,abc"},
+		{"fractional", "2222,3.3"},
+		{"missing ID", "2222,,3333"},
+		{"trailing comma", "2222,"},
+		{"duplicate", "2222,2222"},
+		{"duplicate with leading zeros", "2222,02222"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			raw, err := json.Marshal(tc.deviceID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal([]byte(`{"deviceID":`+string(raw)+`,"hosts":["127.0.0.1"],"port":10002}`), &cfg.Analysis); err != nil {
+				t.Fatalf("unmarshal draft ID: %v", err)
+			}
+			if err := ValidateConfig(cfg); err == nil || !strings.Contains(err.Error(), "设备ID") {
+				t.Fatalf("expected invalid device ID validation error, got %v", err)
+			}
+		})
+	}
+}
 
 func TestValidateConfigNormalizesOptionalPaths(t *testing.T) {
 	cfg := DefaultConfig()

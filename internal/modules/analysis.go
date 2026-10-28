@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"strings"
 	"sync"
 	"time"
 	"virtual-device-ui/internal/config"
@@ -31,7 +32,7 @@ type analysisClientSession struct {
 }
 
 type analysis struct {
-	deviceId          int
+	deviceIDs         []int
 	title             string
 	heartbeatInterval time.Duration
 
@@ -43,11 +44,11 @@ type analysis struct {
 	mu      sync.RWMutex
 }
 
-func NewAnalysisModule(deviceId int, mock mocks.MockDataGenerator) AnalysisModule {
+func NewAnalysisModule(deviceIDs []int, mock mocks.MockDataGenerator) AnalysisModule {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &analysis{
-		deviceId:          deviceId,
+		deviceIDs:         deviceIDs,
 		title:             "解析模块",
 		heartbeatInterval: analysisHeartbeatInterval,
 		config:            config.GetConfig(),
@@ -83,11 +84,11 @@ func (a *analysis) Stop() {
 		delete(a.clients, addr)
 	}
 	a.mu.Unlock()
-	log.Printf("设备ID=%d [%s] 模块已停止", a.deviceId, a.title)
+	log.Printf("设备ID=%v [%s] 模块已停止", a.deviceIDs, a.title)
 }
 
 func (a *analysis) Start() {
-	log.Printf("设备ID=%d [%s] 模块启动", a.deviceId, a.title)
+	log.Printf("设备ID=%v [%s] 模块启动", a.deviceIDs, a.title)
 	// 立即尝试连接一次（在启动goroutine之前）
 	a.tryConnect()
 
@@ -216,16 +217,16 @@ func (a *analysis) tryConnect() {
 
 		conn, err := net.DialTimeout("tcp", serverAddr, 1*time.Second)
 		if err != nil {
-			log.Printf("设备ID=%d\thost=%s\tport=%d [%s] 连接失败: %v", a.deviceId, host, a.config.Analysis.Port, a.title, err)
+			log.Printf("设备ID=%v\thost=%s\tport=%d [%s] 连接失败: %v", a.deviceIDs, host, a.config.Analysis.Port, a.title, err)
 			continue
 		}
 
-		log.Printf("设备ID=%d\thost=%s\tport=%d [%s] 连接成功", a.deviceId, host, a.config.Analysis.Port, a.title)
+		log.Printf("设备ID=%v\thost=%s\tport=%d [%s] 连接成功", a.deviceIDs, host, a.config.Analysis.Port, a.title)
 
 		session, isNew := a.getOrCreateSession(serverAddr)
-		log.Printf("设备ID=%d [%s] getOrCreateSession返回: isNew=%v, serverAddr=%s", a.deviceId, a.title, isNew, serverAddr)
+		log.Printf("设备ID=%v [%s] getOrCreateSession返回: isNew=%v, serverAddr=%s", a.deviceIDs, a.title, isNew, serverAddr)
 		if !isNew {
-			log.Printf("设备ID=%d [%s] 会话已存在，关闭新连接: %s", a.deviceId, a.title, serverAddr)
+			log.Printf("设备ID=%v [%s] 会话已存在，关闭新连接: %s", a.deviceIDs, a.title, serverAddr)
 			conn.Close()
 			continue
 		}
@@ -235,7 +236,7 @@ func (a *analysis) tryConnect() {
 			continue
 		}
 
-		log.Printf("设备ID=%d [%s] 启动数据发送协程到 %s", a.deviceId, a.title, serverAddr)
+		log.Printf("设备ID=%v [%s] 启动数据发送协程到 %s", a.deviceIDs, a.title, serverAddr)
 		// 为每个客户端启动数据发送协程
 		go a.handleReportData(serverAddr, session)
 	}
@@ -262,7 +263,7 @@ func (a *analysis) cleanupInactiveClients() {
 						session.conn = nil
 					}
 					delete(a.clients, addr)
-					log.Printf("设备ID=%d [%s] 清理不活跃客户端: %s", a.deviceId, a.title, addr)
+					log.Printf("设备ID=%v [%s] 清理不活跃客户端: %s", a.deviceIDs, a.title, addr)
 				}
 			}
 			a.mu.Unlock()
@@ -279,7 +280,7 @@ func (a *analysis) handleReportData(clientAddr string, session *analysisClientSe
 		heartbeatInterval = analysisHeartbeatInterval
 	}
 
-	log.Printf("设备ID=%d [%s] 数据发送协程开始运行，目标: %s, 发送间隔: %d-%dms, 心跳间隔: %s", a.deviceId, a.title, clientAddr, minSpeed, maxSpeed, heartbeatInterval)
+	log.Printf("设备ID=%v [%s] 数据发送协程开始运行，目标: %s, 发送间隔: %d-%dms, 心跳间隔: %s", a.deviceIDs, a.title, clientAddr, minSpeed, maxSpeed, heartbeatInterval)
 
 	sendCount := 0
 	heartbeatSequence := 0
@@ -291,33 +292,37 @@ func (a *analysis) handleReportData(clientAddr string, session *analysisClientSe
 	for {
 		select {
 		case <-session.ctx.Done():
-			log.Printf("设备ID=%d [%s] 数据发送协程退出（session取消），目标: %s, 已发送: %d条", a.deviceId, a.title, clientAddr, sendCount)
+			log.Printf("设备ID=%v [%s] 数据发送协程退出（session取消），目标: %s, 已发送: %d条", a.deviceIDs, a.title, clientAddr, sendCount)
 			return
 		case <-a.ctx.Done():
-			log.Printf("设备ID=%d [%s] 数据发送协程退出（模块停止），目标: %s, 已发送: %d条", a.deviceId, a.title, clientAddr, sendCount)
+			log.Printf("设备ID=%v [%s] 数据发送协程退出（模块停止），目标: %s, 已发送: %d条", a.deviceIDs, a.title, clientAddr, sendCount)
 			return
 		case <-reportTimer.C:
-			data := a.mock.GenerateAnalysisData(a.deviceId)
-			if !a.sendSessionData(clientAddr, session, "业务数据", data.String()) {
-				return
-			}
+			// 每轮只生成一次，逐设备复制报文，保持无人机数据与加密内容一致。
+			data := a.mock.GenerateAnalysisData(a.deviceIDs[0]).String()
+			deviceField := fmt.Sprintf("device=%d,", a.deviceIDs[0])
+			for _, deviceID := range a.deviceIDs {
+				payload := strings.ReplaceAll(data, deviceField, fmt.Sprintf("device=%d,", deviceID))
+				if !a.sendSessionData(clientAddr, session, "业务数据", payload) {
+					return
+				}
 
-			sendCount++
-			// 每100条数据打印一次日志，避免日志过多
-			if sendCount%100 == 0 {
-				log.Printf("设备ID=%d [%s] 已发送 %d 条数据到 %s", a.deviceId, a.title, sendCount, clientAddr)
+				sendCount++
+				// 每100条数据打印一次日志，避免日志过多
+				if sendCount%100 == 0 {
+					log.Printf("设备ID=%v [%s] 已发送 %d 条数据到 %s", a.deviceIDs, a.title, sendCount, clientAddr)
+				}
 			}
 			reportTimer.Reset(a.nextReportInterval(minSpeed, maxSpeed))
 		case <-heartbeatTicker.C:
 			heartbeatSequence++
-			heartbeat := formatAnalysisHeartbeat(
-				a.deviceId,
-				heartbeatSequence,
-				1900+rand.Intn(51),
-				18+rand.Intn(38),
-			)
-			if !a.sendSessionData(clientAddr, session, "心跳", heartbeat) {
-				return
+			frequencyMHz := 1900 + rand.Intn(51)
+			temperature := 18 + rand.Intn(38)
+			for _, deviceID := range a.deviceIDs {
+				heartbeat := formatAnalysisHeartbeat(deviceID, heartbeatSequence, frequencyMHz, temperature)
+				if !a.sendSessionData(clientAddr, session, "心跳", heartbeat) {
+					return
+				}
 			}
 		}
 	}
@@ -330,17 +335,17 @@ func (a *analysis) nextReportInterval(minSpeed, maxSpeed int) time.Duration {
 func (a *analysis) sendSessionData(clientAddr string, session *analysisClientSession, dataType, payload string) bool {
 	conn, active := a.snapshotSession(clientAddr, session)
 	if !active || conn == nil {
-		log.Printf("设备ID=%d [%s] 数据发送协程退出（连接无效），目标: %s", a.deviceId, a.title, clientAddr)
+		log.Printf("设备ID=%v [%s] 数据发送协程退出（连接无效），目标: %s", a.deviceIDs, a.title, clientAddr)
 		return false
 	}
 
 	if err := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		log.Printf("设备ID=%d [%s] 设置%s写入超时失败，目标: %s, 错误: %v", a.deviceId, a.title, dataType, clientAddr, err)
+		log.Printf("设备ID=%v [%s] 设置%s写入超时失败，目标: %s, 错误: %v", a.deviceIDs, a.title, dataType, clientAddr, err)
 		a.markSessionDisconnected(clientAddr, session)
 		return false
 	}
 	if _, err := conn.Write([]byte(payload)); err != nil {
-		log.Printf("设备ID=%d [%s] 发送%s到 %s 失败: %v", a.deviceId, a.title, dataType, clientAddr, err)
+		log.Printf("设备ID=%v [%s] 发送%s到 %s 失败: %v", a.deviceIDs, a.title, dataType, clientAddr, err)
 		a.markSessionDisconnected(clientAddr, session)
 		return false
 	}

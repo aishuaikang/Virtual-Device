@@ -76,9 +76,13 @@ func (e *Engine) Start(cfg *config.Config) error {
 	e.precisionDF = nil
 
 	if cfg.Analysis.Enabled {
-		log.Printf("[Engine] 创建解析模块，设备ID=%d", cfg.Analysis.DeviceID)
+		deviceIDs, err := cfg.Analysis.DeviceIDs()
+		if err != nil {
+			return err
+		}
+		log.Printf("[Engine] 创建解析模块，设备ID=%v", deviceIDs)
 		e.analysisMock = mocks.NewMockDataGenerator(cfg.Analysis.DroneCount)
-		e.analysis = modules.NewAnalysisModule(cfg.Analysis.DeviceID, e.analysisMock)
+		e.analysis = modules.NewAnalysisModule(deviceIDs, e.analysisMock)
 	} else {
 		log.Printf("[Engine] 解析模块未启用")
 	}

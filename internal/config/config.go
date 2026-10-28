@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -39,7 +40,7 @@ type BaseConfig struct {
 // AnalysisConfig 解析模块配置（带空包概率）
 type AnalysisConfig struct {
 	Enabled                bool     `json:"enabled"`                  // 是否启用模块
-	DeviceID               int      `json:"deviceID"`                 // 设备ID
+	DeviceID               string   `json:"deviceID"`                 // 设备ID，多个用逗号分隔
 	DroneCount             int      `json:"drone_count"`              // 解析模块无人机总数
 	Hosts                  []string `json:"hosts"`                    // 多个服务器地址
 	Port                   int      `json:"port"`                     // 端口
@@ -102,13 +103,13 @@ func (c *BaseConfig) UnmarshalJSON(data []byte) error {
 
 func (c *AnalysisConfig) UnmarshalJSON(data []byte) error {
 	type rawAnalysisConfig struct {
-		Enabled                *bool    `json:"enabled"`
-		DeviceID               int      `json:"deviceID"`
-		DroneCount             int      `json:"drone_count"`
-		Hosts                  []string `json:"hosts"`
-		Port                   int      `json:"port"`
-		EmptyPacketProbability int      `json:"empty_packet_probability"`
-		O3PlusO4DataFile       *string  `json:"o3_plus_o4_data_file"`
+		Enabled                *bool           `json:"enabled"`
+		DeviceID               json.RawMessage `json:"deviceID"`
+		DroneCount             int             `json:"drone_count"`
+		Hosts                  []string        `json:"hosts"`
+		Port                   int             `json:"port"`
+		EmptyPacketProbability int             `json:"empty_packet_probability"`
+		O3PlusO4DataFile       *string         `json:"o3_plus_o4_data_file"`
 	}
 
 	var raw rawAnalysisConfig
@@ -120,13 +121,42 @@ func (c *AnalysisConfig) UnmarshalJSON(data []byte) error {
 	if raw.Enabled != nil {
 		c.Enabled = *raw.Enabled
 	}
-	c.DeviceID = raw.DeviceID
+	c.DeviceID = ""
+	if len(raw.DeviceID) > 0 {
+		if err := json.Unmarshal(raw.DeviceID, &c.DeviceID); err != nil {
+			// 兼容旧配置中使用数字保存的单个设备ID。
+			var deviceID int
+			if err := json.Unmarshal(raw.DeviceID, &deviceID); err != nil {
+				return fmt.Errorf("Analysis模块设备ID格式错误: %w", err)
+			}
+			c.DeviceID = strconv.Itoa(deviceID)
+		}
+	}
 	c.DroneCount = raw.DroneCount
 	c.Hosts = raw.Hosts
 	c.Port = raw.Port
 	c.EmptyPacketProbability = raw.EmptyPacketProbability
 	c.O3PlusO4DataFile = raw.O3PlusO4DataFile
 	return nil
+}
+
+// DeviceIDs returns the distinct positive device IDs in their configured order.
+func (c *AnalysisConfig) DeviceIDs() ([]int, error) {
+	parts := strings.Split(c.DeviceID, ",")
+	deviceIDs := make([]int, 0, len(parts))
+	seen := make(map[int]bool, len(parts))
+	for _, part := range parts {
+		deviceID, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil || deviceID <= 0 {
+			return nil, fmt.Errorf("Analysis模块设备ID必须为逗号分隔的正整数")
+		}
+		if seen[deviceID] {
+			return nil, fmt.Errorf("Analysis模块设备ID不能重复: %d", deviceID)
+		}
+		seen[deviceID] = true
+		deviceIDs = append(deviceIDs, deviceID)
+	}
+	return deviceIDs, nil
 }
 
 func (c *DetectionConfig) UnmarshalJSON(data []byte) error {
@@ -444,7 +474,7 @@ func DefaultConfig() *Config {
 		MaxPushSpeed: 1000,
 		Analysis: AnalysisConfig{
 			Enabled:                true,
-			DeviceID:               2001,
+			DeviceID:               "2001",
 			DroneCount:             3,
 			Hosts:                  []string{"127.0.0.1"},
 			Port:                   10002,
@@ -759,8 +789,8 @@ func validateAnalysisConfig(config *AnalysisConfig) error {
 		return fmt.Errorf("Analysis模块无人机数量不能为负数")
 	}
 
-	if config.DeviceID <= 0 {
-		return fmt.Errorf("Analysis模块设备ID必须大于0")
+	if _, err := config.DeviceIDs(); err != nil {
+		return err
 	}
 
 	if len(config.Hosts) == 0 {

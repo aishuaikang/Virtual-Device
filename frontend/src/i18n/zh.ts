@@ -55,6 +55,7 @@ export default {
     commandPort: "指令端口",
     dataPort: "数据端口",
     deviceID: "设备 ID",
+    analysisDeviceIDs: "设备 ID（多个用逗号分隔）",
     droneCount: "目标数量",
     heartbeatInterval: "心跳间隔（秒）",
     emptyPacketProb: "空包概率（%）",

@@ -204,11 +204,11 @@ export default function ConfigEditor({
               max={65535}
               disabled={disabled}
             />
-            <NumberField
-              label={t("config.deviceID")}
+            <TextField
+              label={t("config.analysisDeviceIDs")}
               value={cfg.analysis.deviceID}
+              placeholder="2222,3333"
               onChange={(deviceID) => patch("analysis", { deviceID })}
-              min={0}
               disabled={disabled}
             />
             <NumberField

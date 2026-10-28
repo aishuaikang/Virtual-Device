@@ -55,6 +55,7 @@ export default {
     commandPort: "Command port",
     dataPort: "Data port",
     deviceID: "Device ID",
+    analysisDeviceIDs: "Device IDs (comma separated)",
     droneCount: "Target count",
     heartbeatInterval: "Heartbeat interval (s)",
     emptyPacketProb: "Empty packets (%)",
