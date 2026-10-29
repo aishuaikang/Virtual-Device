@@ -51,11 +51,11 @@ export namespace config {
 	    bearing_deg: number;
 	    level_dbuv: number;
 	    quality: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new PrecisionDFConfig(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enabled = source["enabled"];
@@ -90,11 +90,11 @@ export namespace config {
 	    deviceID: number;
 	    reporting: boolean;
 	    rssi: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new JointDirectionSample(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.deviceID = source["deviceID"];
@@ -106,18 +106,18 @@ export namespace config {
 	    model: string;
 	    frequencies: number[];
 	    faces: JointDirectionSample[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new JointDirectionTarget(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.model = source["model"];
 	        this.frequencies = source["frequencies"];
 	        this.faces = this.convertValues(source["faces"], JointDirectionSample);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -140,18 +140,18 @@ export namespace config {
 	    enabled: boolean;
 	    hop_interval_ms: number;
 	    targets: JointDirectionTarget[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new JointDirectionConfig(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enabled = source["enabled"];
 	        this.hop_interval_ms = source["hop_interval_ms"];
 	        this.targets = this.convertValues(source["targets"], JointDirectionTarget);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -306,13 +306,13 @@ export namespace config {
 		    return a;
 		}
 	}
-
-
-
 	
 	
 	
-
+	
+	
+	
+	
 
 }
 
@@ -534,7 +534,7 @@ export namespace modules {
 		    return a;
 		}
 	}
-
+	
 	export class PrecisionDFSnapshot {
 	    listening: boolean;
 	    commandAddress: string;
@@ -551,11 +551,11 @@ export namespace modules {
 	    lastCommand?: string;
 	    lastActivityAt?: string;
 	    lastError?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new PrecisionDFSnapshot(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.listening = source["listening"];
