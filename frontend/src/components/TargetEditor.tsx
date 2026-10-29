@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Button, Collapse, Select } from "antd";
 import { config } from "../../wailsjs/go/models";
 import { Advanced, Field, NumberField, TextField } from "./ConfigFields";
 import Icon from "./Icon";
@@ -53,19 +54,16 @@ function TargetRow({
   );
 
   return (
-    <details
+    <Collapse
       className="target-row"
-      open={open}
-      onToggle={(event) => setOpen(event.currentTarget.open)}
-    >
-      <summary>
-        <Icon name="chevron" />
+      activeKey={open ? ["target"] : []}
+      onChange={(keys) => setOpen(keys.includes("target"))}
+      items={[{ key: "target", label: <div className="target-summary">
         <strong>
           {drone.model || t("config.targetNumber", { index: index + 1 })}
         </strong>
         <code>{drone.serial || "—"}</code>
-      </summary>
-      <div className="target-fields">
+      </div>, children: <div className="target-fields">
         <div className="form-grid">
           <TextField
             label={t("config.serial")}
@@ -94,32 +92,28 @@ function TargetRow({
             disabled={disabled}
           />
           <Field label={t("config.type")}>
-            <select
+            <Select
               aria-label={t("config.type")}
               value={drone.type}
-              onChange={(event) => onChange({ type: event.target.value })}
+              onChange={(type) => onChange({ type })}
               disabled={disabled}
-            >
-              <option value="AUTO">AUTO</option>
-              <option value="DID">DID</option>
-              <option value="RID">RID</option>
-            </select>
+              options={[{ value: "AUTO", label: t("config.auto") }, { value: "DID", label: "DID" }, { value: "RID", label: "RID" }]}
+            />
           </Field>
         </div>
         <div className="form-grid coordinate-grid">
           {coordinates("drone_gps")}
           {coordinates("pilot_gps")}
         </div>
-        <button
+        <Button type="text" danger
           className="button button-quiet danger"
           onClick={onDelete}
           disabled={disabled}
         >
           <Icon name="trash" />
           {t("config.deleteTarget")}
-        </button>
-      </div>
-    </details>
+        </Button>
+      </div> }]} />
   );
 }
 
@@ -153,14 +147,14 @@ export default function TargetEditor({ cfg, onChange, disabled }: Props) {
     <>
       <div className="section-heading">
         <h2>{t("config.centerPoint")}</h2>
-        <button
+        <Button type="text"
           className="button button-quiet"
           disabled={disabled}
           onClick={() => setShowMap(true)}
         >
           <Icon name="map" />
           {t("config.map")}
-        </button>
+        </Button>
       </div>
       <div className="form-grid">
         <NumberField
@@ -236,14 +230,14 @@ export default function TargetEditor({ cfg, onChange, disabled }: Props) {
             {t("config.targets")}
             <span className="count">{targets.length}</span>
           </h2>
-          <button
+          <Button type="text"
             className="button button-quiet"
             disabled={disabled}
             onClick={add}
           >
             <Icon name="plus" />
             {t("config.add")}
-          </button>
+          </Button>
         </div>
         {targets.map((drone, index) => (
           <TargetRow

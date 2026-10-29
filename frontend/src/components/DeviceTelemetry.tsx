@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next";
+import { Collapse } from "antd";
 import { engine } from "../../wailsjs/go/models";
 import type { DeviceId } from "../devices";
+import ErrorMessage from "./ErrorMessage";
+import { localizeCommand } from "../i18n/runtime";
 
 export default function DeviceTelemetry({
   device,
@@ -38,7 +41,7 @@ export default function DeviceTelemetry({
         <h2>{t("runtime.title")}</h2>
         {receiver?.running && (
           <code>
-            {receiver.mode} · TASK {receiver.taskID}
+            {receiver.mode} · {t("runtime.task", { id: receiver.taskID })}
           </code>
         )}
       </div>
@@ -124,9 +127,11 @@ export default function DeviceTelemetry({
       {lastCommand && (
         <div className="last-command">
           <span>{t("runtime.lastCommand")}</span>
-          <code>{lastCommand}</code>
+          <code>{localizeCommand(lastCommand, t)}</code>
           {directed?.lastCommandDetail && (
-            <small>{directed.lastCommandDetail}</small>
+            <Collapse className="runtime-command-details" ghost size="small" items={[{
+              key: "details", label: t("app.details"), children: <pre>{directed.lastCommandDetail}</pre>,
+            }]} />
           )}
         </div>
       )}
@@ -137,9 +142,9 @@ export default function DeviceTelemetry({
         </div>
       )}
       {lastError && (
-        <p className="inline-error" role="alert">
-          {lastError}
-        </p>
+        <div className="inline-error" role="alert">
+          <ErrorMessage error={lastError} />
+        </div>
       )}
     </section>
   );

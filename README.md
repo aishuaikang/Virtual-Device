@@ -21,3 +21,11 @@ to this in your browser, and you can call your Go code from devtools.
 ## Building
 
 To build a redistributable, production mode package, use `wails build`.
+
+## 界面语言
+
+界面控件与 `uav_defender_util` 统一使用 Ant Design，包括下拉选择、输入框、数字输入、开关、复选框和确认弹窗；文件导入、导出继续使用系统文件选择器。
+
+支持中文、英语、土耳其语和法语，可在右上角选择并自动记住。场景导入、导出、覆盖及退出保存弹窗跟随界面语言；原始协议日志和错误技术详情保留原文。
+
+如需限定发行版语言，可设置 `VITE_APP_LANGUAGES=zh,en,tr,fr`，例如 `VITE_APP_LANGUAGES=fr wails build` 构建法语版。语言代码使用 `zh`、`en`、`tr`、`fr`。前端翻译完整性与语言切换测试可在 `frontend/` 内运行 `bun test`。

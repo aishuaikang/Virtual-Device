@@ -1,4 +1,4 @@
-export default {
+const en = {
   app: {
     title: "Device Simulator",
     loading: "Loading…",
@@ -14,8 +14,11 @@ export default {
     clear: "Clear",
     clearInput: "Clear input",
     language: "Change language",
+    details: "Technical details",
     modules: "Modules",
     connections: "{{count}} connections",
+    connections_one: "{{count}} connection",
+    connections_other: "{{count}} connections",
   },
   devices: {
     detection: "Detection",
@@ -45,6 +48,13 @@ export default {
     confirmDelete: "Delete scene “{{name}}”?",
     confirmSwitch: "Discard unsaved changes and switch scenes?",
     saved: "Scene saved",
+    replace: "Replace scene",
+    confirmReplace: "Scene “{{name}}” already exists. Replace it?",
+    exitTitle: "Save before exit?",
+    exitExisting: "Configuration has changed. Save it to scene “{{name}}” before exit?",
+    exitNew: "Configuration has changed. Save it as a new scene before exit?",
+    saveExit: "Save & Exit",
+    discardExit: "Discard & Exit",
   },
   config: {
     deviceConfig: "Device configuration",
@@ -93,6 +103,7 @@ export default {
     freq: "Frequency (MHz)",
     rssi: "RSSI (dBm)",
     type: "Protocol",
+    auto: "Automatic",
     droneLat: "Drone latitude",
     droneLng: "Drone longitude",
     pilotLat: "Pilot latitude",
@@ -139,6 +150,7 @@ export default {
     ptz: "PTZ",
     lastCommand: "Last command",
     clients: "Clients",
+    task: "Task {{id}}",
   },
   log: {
     title: "Logs",
@@ -156,5 +168,33 @@ export default {
     searching: "Searching",
     noResults: "No locations found",
     tileError: "Map unavailable. Coordinates can still be entered.",
+    zoomIn: "Zoom in", zoomOut: "Zoom out",
+  },
+  errors: {
+    operation: "The operation could not be completed.",
+    loadConfig: "Unable to load the configuration.",
+    syncConfig: "Unable to apply the configuration.",
+    status: "Unable to refresh the simulator status.",
+    start: "Unable to start the simulator.",
+    stop: "Unable to stop the simulator.",
+    scene: "Unable to complete the scene operation.",
+    search: "Unable to search for a location. Try again later.",
+    addressInUse: "The listen address or port is already in use. Choose a different port.",
+    permission: "Permission denied. Check file or network access permissions.",
+    timeout: "The request timed out. Check the connection and try again.",
+    connection: "The connection is unavailable. Check the target address and network.",
+    invalidConfig: "The configuration is invalid. Check the settings and try again.",
+    runningConfig: "Stop the simulator before changing these settings.",
+  },
+  commands: {
+    heartbeat: "Heartbeat", ampStatus: "Amplifier status", attenuation: "Amplifier ATT read/write",
+    signalSource: "Signal source enable", wideband: "Wideband frequency configuration", narrowband: "Narrowband amplifier control",
+    ptzStop: "Stop PTZ", ptzPreset: "Save PTZ preset", ptzMotion: "PTZ movement",
+    horizontalLocate: "PTZ horizontal positioning", pitchLocate: "PTZ tilt positioning",
+    horizontalQuery: "Query PTZ horizontal angle", pitchQuery: "Query PTZ tilt angle",
+    speedSet: "Set PTZ speed", speedQuery: "Query PTZ speed",
   },
 };
+
+export type Messages = { [Section in keyof typeof en]: { [Key in keyof typeof en[Section]]: string } };
+export default en;

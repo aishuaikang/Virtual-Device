@@ -1,3 +1,4 @@
+import { Button } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import L from "leaflet";
@@ -11,6 +12,7 @@ import { NumberField } from "./ConfigFields";
 import { ClearableTextInput } from "./ClearableInput";
 import Icon from "./Icon";
 import Modal from "./Modal";
+import ErrorMessage from "./ErrorMessage";
 
 interface Props {
   lat: number;
@@ -24,18 +26,21 @@ export default function MapPicker({ lat, lng, onConfirm, onClose }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const marker = useRef<L.Marker | null>(null);
+  const zoom = useRef<L.Control.Zoom | null>(null);
   const request = useRef(0);
   const [pos, setPos] = useState({ lat, lng });
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
+  const [noResults, setNoResults] = useState(false);
   const [tileError, setTileError] = useState(false);
   const [results, setResults] = useState<main.LocationSearchResult[]>([]);
 
   useEffect(() => {
     if (!container.current) return;
-    const view = L.map(container.current).setView([lat, lng], 13);
+    const view = L.map(container.current, { zoomControl: false }).setView([lat, lng], 13);
     map.current = view;
+    zoom.current = L.control.zoom().addTo(view);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "© OpenStreetMap",
       maxZoom: 19,
@@ -68,8 +73,18 @@ export default function MapPicker({ lat, lng, onConfirm, onClose }: Props) {
       window.cancelAnimationFrame(frame);
       view.remove();
       map.current = null;
+      zoom.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const controls = zoom.current?.getContainer();
+    for (const [selector, key] of [[".leaflet-control-zoom-in", "map.zoomIn"], [".leaflet-control-zoom-out", "map.zoomOut"]]) {
+      const button = controls?.querySelector(selector);
+      button?.setAttribute("title", t(key));
+      button?.setAttribute("aria-label", t(key));
+    }
+  }, [t]);
 
   const move = (next: { lat: number; lng: number }) => {
     setPos(next);
@@ -84,11 +99,12 @@ export default function MapPicker({ lat, lng, onConfirm, onClose }: Props) {
     const id = ++request.current;
     setSearching(true);
     setError("");
+    setNoResults(false);
     try {
       const next = (await SearchPlaces(query.trim())) ?? [];
       if (id !== request.current) return;
       setResults(next);
-      if (!next.length) setError(t("map.noResults"));
+      setNoResults(!next.length);
     } catch (value) {
       if (id === request.current) {
         setResults([]);
@@ -111,7 +127,7 @@ export default function MapPicker({ lat, lng, onConfirm, onClose }: Props) {
             if (event.key === "Enter") void search();
           }}
         />
-        <button
+        <Button type="default"
           className="button"
           onClick={() => void search()}
           disabled={searching || !query.trim()}
@@ -119,7 +135,7 @@ export default function MapPicker({ lat, lng, onConfirm, onClose }: Props) {
         >
           <Icon name="search" />
           {searching ? t("map.searching") : t("map.find")}
-        </button>
+        </Button>
       </div>
       <form
         onSubmit={(event) => {
@@ -129,17 +145,18 @@ export default function MapPicker({ lat, lng, onConfirm, onClose }: Props) {
       >
         <div className="map-body">
           <div className="map-canvas" ref={container} />
-          {(error || results.length > 0) && (
+          {(error || noResults || results.length > 0) && (
             <div className="map-results">
               {error && (
-                <p className="inline-error" role="alert">
-                  {error}
-                </p>
+                <div className="inline-error" role="alert">
+                  <ErrorMessage error={error} messageKey="errors.search" />
+                </div>
               )}
+              {noResults && <p role="status">{t("map.noResults")}</p>}
               {results.map((result, index) => (
-                <button
+                <Button type="default"
                   key={index}
-                  type="button"
+                  htmlType="button"
                   onClick={() => {
                     move({ lat: result.lat, lng: result.lng });
                     map.current?.setZoom(15);
@@ -150,7 +167,7 @@ export default function MapPicker({ lat, lng, onConfirm, onClose }: Props) {
                   <code>
                     {result.lat.toFixed(6)}, {result.lng.toFixed(6)}
                   </code>
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -175,10 +192,10 @@ export default function MapPicker({ lat, lng, onConfirm, onClose }: Props) {
           />
         </div>
         <footer className="dialog-actions">
-          <button type="button" className="button" onClick={onClose}>
+          <Button type="default" htmlType="button" className="button" onClick={onClose}>
             {t("app.cancel")}
-          </button>
-          <button className="button button-primary">{t("app.confirm")}</button>
+          </Button>
+          <Button type="primary" htmlType="submit" className="button button-primary">{t("app.confirm")}</Button>
         </footer>
       </form>
     </Modal>

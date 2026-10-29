@@ -4,6 +4,8 @@ import {config} from '../models';
 import {engine} from '../models';
 import {main} from '../models';
 
+export function ConfirmClose(arg1:boolean):Promise<void>;
+
 export function DeleteScene(arg1:string):Promise<void>;
 
 export function ExportScene(arg1:string):Promise<string>;
@@ -22,13 +24,15 @@ export function LoadScene(arg1:string):Promise<config.Config>;
 
 export function RenameScene(arg1:string,arg2:string):Promise<void>;
 
-export function SaveScene(arg1:string,arg2:config.Config):Promise<void>;
+export function SaveScene(arg1:string,arg2:config.Config,arg3:boolean):Promise<void>;
 
 export function SearchPlaces(arg1:string):Promise<Array<main.LocationSearchResult>>;
 
 export function SelectDirectory(arg1:string,arg2:string):Promise<string>;
 
 export function SelectFile(arg1:string,arg2:string):Promise<string>;
+
+export function SetLanguage(arg1:string):Promise<void>;
 
 export function StartEngine(arg1:config.Config):Promise<void>;
 

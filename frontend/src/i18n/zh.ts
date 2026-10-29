@@ -1,4 +1,6 @@
-export default {
+import type { Messages } from "./en";
+
+const zh: Messages = {
   app: {
     title: "设备模拟器",
     loading: "加载中…",
@@ -14,8 +16,11 @@ export default {
     clear: "清空",
     clearInput: "清空输入",
     language: "切换语言",
+    details: "技术详情",
     modules: "模块",
     connections: "{{count}} 个连接",
+    connections_one: "{{count}} 个连接",
+    connections_other: "{{count}} 个连接",
   },
   devices: {
     detection: "侦测",
@@ -45,6 +50,13 @@ export default {
     confirmDelete: "删除场景“{{name}}”？",
     confirmSwitch: "当前配置尚未保存，仍要切换场景？",
     saved: "场景已保存",
+    replace: "覆盖场景",
+    confirmReplace: "场景“{{name}}”已存在，是否覆盖？",
+    exitTitle: "退出前保存？",
+    exitExisting: "当前配置已修改，是否在退出前保存到场景“{{name}}”？",
+    exitNew: "当前配置已修改，是否在退出前保存为新场景？",
+    saveExit: "保存并退出",
+    discardExit: "放弃并退出",
   },
   config: {
     deviceConfig: "设备配置",
@@ -93,6 +105,7 @@ export default {
     freq: "频率（MHz）",
     rssi: "RSSI（dBm）",
     type: "协议类型",
+    auto: "自动识别",
     droneLat: "无人机纬度",
     droneLng: "无人机经度",
     pilotLat: "飞手纬度",
@@ -138,6 +151,7 @@ export default {
     ptz: "云台",
     lastCommand: "最近指令",
     clients: "客户端",
+    task: "任务 {{id}}",
   },
   log: {
     title: "日志",
@@ -155,5 +169,32 @@ export default {
     searching: "搜索中",
     noResults: "未找到位置",
     tileError: "底图不可用，仍可输入坐标",
+    zoomIn: "放大", zoomOut: "缩小",
+  },
+  errors: {
+    operation: "操作未完成。",
+    loadConfig: "无法加载配置。",
+    syncConfig: "配置未能应用。",
+    status: "无法刷新模拟器状态。",
+    start: "模拟器启动失败。",
+    stop: "模拟器停止失败。",
+    scene: "场景操作未完成。",
+    search: "位置搜索失败，请稍后重试。",
+    addressInUse: "监听地址或端口已被占用，请更换端口。",
+    permission: "权限不足，请检查文件或网络访问权限。",
+    timeout: "请求超时，请检查连接后重试。",
+    connection: "连接不可用，请检查目标地址和网络。",
+    invalidConfig: "配置无效，请检查设置后重试。",
+    runningConfig: "请先停止模拟器，再修改这些配置。",
+  },
+  commands: {
+    heartbeat: "心跳", ampStatus: "功放状态查询", attenuation: "功放 ATT 读写",
+    signalSource: "信号源使能", wideband: "宽带频率配置", narrowband: "窄带功放控制",
+    ptzStop: "云台停止", ptzPreset: "保存云台预置位", ptzMotion: "云台运动",
+    horizontalLocate: "云台水平定位", pitchLocate: "云台俯仰定位",
+    horizontalQuery: "云台水平角查询", pitchQuery: "云台俯仰角查询",
+    speedSet: "云台速度设置", speedQuery: "云台速度查询",
   },
 };
+
+export default zh;

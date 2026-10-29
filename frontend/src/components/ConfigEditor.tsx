@@ -1,4 +1,5 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
+import { Button, Input, Select } from "antd";
 import { useTranslation } from "react-i18next";
 import { config } from "../../wailsjs/go/models";
 import { GetLocalIPs, SelectFile } from "../../wailsjs/go/main/App";
@@ -35,7 +36,7 @@ export default function ConfigEditor({
   const { t } = useTranslation();
   const [localIPs, setLocalIPs] = useState<string[]>([]);
   const [detectionIndex, setDetectionIndex] = useState(0);
-  const addressList = useId();
+  const addressOptions = [...new Set(["0.0.0.0", "127.0.0.1", ...localIPs])];
   const items = detections(cfg);
   const index = Math.min(detectionIndex, items.length - 1);
   const detection = items[index];
@@ -104,11 +105,6 @@ export default function ConfigEditor({
 
   return (
     <div className="device-config">
-      <datalist id={addressList}>
-        {[...new Set(["0.0.0.0", "127.0.0.1", ...localIPs])].map((ip) => (
-          <option key={ip} value={ip} />
-        ))}
-      </datalist>
       {device === "detection" && (
         <>
           <JointDirectionEditor
@@ -121,34 +117,29 @@ export default function ConfigEditor({
             }
           />
           <div className="device-toolbar">
-            <select
+            <Select<number>
               aria-label={t("config.detectionDevice")}
               value={index}
-              onChange={(event) =>
-                setDetectionIndex(Number(event.target.value))
-              }
-            >
-              {items.map((item, i) => (
-                <option key={i} value={i}>
-                  {t("config.deviceNumber", { index: i + 1 })} · {item.deviceID}
-                </option>
-              ))}
-            </select>
+              onChange={setDetectionIndex}
+              options={items.map((item, i) => ({ value: i,
+                label: `${t("config.deviceNumber", { index: i + 1 })} · ${item.deviceID}`,
+              }))}
+            />
             <Toggle
               checked={detection.enabled}
               label={t("config.enableDevice")}
               onChange={(enabled) => patchDetection({ enabled })}
               disabled={disabled}
             />
-            <button
+            <Button type="text"
               className="button button-quiet"
               onClick={addDetection}
               disabled={disabled}
             >
               <Icon name="plus" />
               {t("config.add")}
-            </button>
-            <button
+            </Button>
+            <Button type="text" danger
               className="icon-button danger"
               aria-label={t("config.deleteDevice")}
               title={t("config.deleteDevice")}
@@ -159,14 +150,14 @@ export default function ConfigEditor({
               }}
             >
               <Icon name="trash" />
-            </button>
+            </Button>
           </div>
           <div className="form-grid">
             <TextField
               label={t("config.listenHost")}
               value={detection.host}
               onChange={(host) => patchDetection({ host })}
-              list={addressList}
+              options={addressOptions}
               disabled={disabled}
             />
             <NumberField
@@ -254,22 +245,22 @@ export default function ConfigEditor({
             />
             <Field label={t("config.o3DataFile")}>
               <div className="file-input">
-                <input
+                <Input
                   aria-label={t("config.o3DataFile")}
                   value={cfg.analysis.o3_plus_o4_data_file ?? ""}
                   placeholder={t("config.randomData")}
                   readOnly
                   title={cfg.analysis.o3_plus_o4_data_file}
                 />
-                <button
+                <Button type="default"
                   className="button"
                   disabled={disabled}
                   onClick={() => void pickFile()}
                 >
                   {t("config.choose")}
-                </button>
+                </Button>
                 {cfg.analysis.o3_plus_o4_data_file && (
-                  <button
+                  <Button type="text"
                     className="icon-button"
                     aria-label={t("app.clear")}
                     disabled={disabled}
@@ -278,7 +269,7 @@ export default function ConfigEditor({
                     }
                   >
                     <Icon name="close" />
-                  </button>
+                  </Button>
                 )}
               </div>
             </Field>
@@ -294,7 +285,7 @@ export default function ConfigEditor({
                 label={t("config.listenHost")}
                 value={cfg.precision_df.host}
                 onChange={(host) => patch("precision_df", { host })}
-                list={addressList}
+                options={addressOptions}
                 disabled={disabled}
               />
             </div>
@@ -363,7 +354,7 @@ export default function ConfigEditor({
               label={t("config.listenHost")}
               value={cfg.directed_strike.host}
               onChange={(host) => patch("directed_strike", { host })}
-              list={addressList}
+              options={addressOptions}
               disabled={disabled}
             />
             <NumberField

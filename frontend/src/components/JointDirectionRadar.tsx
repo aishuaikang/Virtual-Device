@@ -1,5 +1,6 @@
 import { useRef, useState, type PointerEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { Checkbox } from "antd";
 import { config } from "../../wailsjs/go/models";
 
 const center = 160;
@@ -69,14 +70,12 @@ export default function JointDirectionRadar({
     <div className="joint-radar">
       <div className="joint-radar-heading">
         <strong>{t("joint.signalRadar")}</strong>
-        <label className="joint-link-toggle">
-          <input
-            type="checkbox"
+        <Checkbox className="joint-link-toggle"
             checked={linked}
             onChange={(event) => setLinked(event.target.checked)}
-          />
+          >
           {t("joint.linkFaces")}
-        </label>
+        </Checkbox>
       </div>
       <svg
         className="joint-radar-chart"

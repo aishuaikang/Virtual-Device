@@ -37,6 +37,7 @@ type App struct {
 	selectedScene string
 	dirty         bool
 	lang          string
+	closeApproved bool
 }
 
 type LocationSearchResult struct {
@@ -50,14 +51,6 @@ type nominatimSearchResult struct {
 	Lat         string `json:"lat"`
 	Lon         string `json:"lon"`
 }
-
-const (
-	closeSaveAndExitButton    = "Save & Exit / 保存并退出"
-	closeDiscardAndExitButton = "Discard / 直接退出"
-	closeCancelButton         = "Cancel / 取消"
-	overwriteSceneButton      = "Replace / 覆盖"
-	dialogOKButton            = "OK / 确定"
-)
 
 func cloneConfig(cfg *config.Config) *config.Config {
 	if cfg == nil {
@@ -270,59 +263,46 @@ func (a *App) savePreset(name string, cfg *config.Config) error {
 	return nil
 }
 
-// beforeClose 在应用关闭前触发，返回 true 会阻止关闭。
-func (a *App) beforeClose(ctx context.Context) (prevent bool) {
+// beforeClose 将未保存配置交给前端统一样式的确认框处理。
+func (a *App) beforeClose(ctx context.Context) bool {
+	a.stateMu.RLock()
+	approved := a.closeApproved
+	a.stateMu.RUnlock()
+	if approved {
+		return false
+	}
 	currentCfg, baselineCfg, selectedScene, dirty := a.closeStateSnapshot()
 	if !dirty || configsEqual(currentCfg, baselineCfg) {
 		return false
 	}
+	wailsruntime.EventsEmit(ctx, "close-requested", strings.TrimSpace(selectedScene))
+	return true
+}
 
-	targetScene := strings.TrimSpace(selectedScene)
-	autoCreateScene := false
-	if targetScene == "" {
-		autoCreateScene = true
-		targetScene = a.nextCloseSaveSceneName("退出前保存 " + time.Now().Format("2006-01-02 15-04-05"))
-	}
-
-	message := fmt.Sprintf("Configuration has changed. Save it to preset \"%s\" before exit?\n当前配置已修改，是否在退出前保存到预设“%s”？", targetScene, targetScene)
-	if autoCreateScene {
-		message = fmt.Sprintf("Configuration has changed. Save it as a new preset before exit?\nIf saved, preset \"%s\" will be created.\n当前配置已修改，是否在退出前保存为预设？\n若保存，将创建预设“%s”。", targetScene, targetScene)
-	}
-
-	choice, err := wailsruntime.MessageDialog(ctx, wailsruntime.MessageDialogOptions{
-		Type:          wailsruntime.QuestionDialog,
-		Title:         "Save Preset? / 保存预设？",
-		Message:       message,
-		Buttons:       []string{closeSaveAndExitButton, closeDiscardAndExitButton, closeCancelButton},
-		DefaultButton: closeSaveAndExitButton,
-		CancelButton:  closeCancelButton,
-	})
-	if err != nil {
-		return true
-	}
-
-	switch choice {
-	case closeSaveAndExitButton:
-		if currentCfg == nil {
-			return false
+func (a *App) prepareClose(save bool) error {
+	currentCfg, baselineCfg, selectedScene, dirty := a.closeStateSnapshot()
+	if save && dirty && !configsEqual(currentCfg, baselineCfg) {
+		targetScene := strings.TrimSpace(selectedScene)
+		if targetScene == "" {
+			targetScene = a.nextCloseSaveSceneName(a.dialogMessages().saveName + " " + time.Now().Format("2006-01-02 15-04-05"))
 		}
 		if err := a.savePreset(targetScene, currentCfg); err != nil {
-			_, _ = wailsruntime.MessageDialog(ctx, wailsruntime.MessageDialogOptions{
-				Type:          wailsruntime.ErrorDialog,
-				Title:         "Save Failed / 保存失败",
-				Message:       fmt.Sprintf("Failed to save preset before exit: %v\n退出前保存预设失败：%v", err, err),
-				Buttons:       []string{dialogOKButton},
-				DefaultButton: dialogOKButton,
-				CancelButton:  dialogOKButton,
-			})
-			return true
+			return err
 		}
-		return false
-	case closeDiscardAndExitButton:
-		return false
-	default:
-		return true
 	}
+	a.stateMu.Lock()
+	a.closeApproved = true
+	a.stateMu.Unlock()
+	return nil
+}
+
+// ConfirmClose 在前端选择保存或放弃后退出；保存失败时继续保留窗口和草稿。
+func (a *App) ConfirmClose(save bool) error {
+	if err := a.prepareClose(save); err != nil {
+		return err
+	}
+	wailsruntime.Quit(a.ctx)
+	return nil
 }
 
 func resolveDialogDefaults(currentPath string) (string, string) {
@@ -470,9 +450,11 @@ func (a *App) ImportScene() (string, error) {
 	if a.sceneManager == nil {
 		return "", nil
 	}
+	text := a.dialogMessages()
 	importPath, err := wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
+		Title: text.importTitle,
 		Filters: []wailsruntime.FileFilter{
-			{DisplayName: "JSON Files (*.json)", Pattern: "*.json"},
+			{DisplayName: text.jsonFiles, Pattern: "*.json"},
 		},
 	})
 	if err != nil || importPath == "" {
@@ -486,10 +468,12 @@ func (a *App) ExportScene(name string) (string, error) {
 	if a.sceneManager == nil {
 		return "", nil
 	}
+	text := a.dialogMessages()
 	exportPath, err := wailsruntime.SaveFileDialog(a.ctx, wailsruntime.SaveDialogOptions{
+		Title:           text.exportTitle,
 		DefaultFilename: name + ".json",
 		Filters: []wailsruntime.FileFilter{
-			{DisplayName: "JSON Files (*.json)", Pattern: "*.json"},
+			{DisplayName: text.jsonFiles, Pattern: "*.json"},
 		},
 	})
 	if err != nil || exportPath == "" {
@@ -519,44 +503,23 @@ func (a *App) LoadScene(name string) (*config.Config, error) {
 	return cfg, nil
 }
 
-// SaveScene 保存场景
-func (a *App) SaveScene(name string, cfg config.Config) error {
+// SaveScene 保存场景；只有前端明确确认时才允许覆盖。
+func (a *App) SaveScene(name string, cfg config.Config, overwrite bool) error {
+	if overwrite {
+		return a.savePreset(name, &cfg)
+	}
 	if a.sceneManager == nil {
-		return nil
+		return fmt.Errorf("场景管理器未初始化")
 	}
-	trimmedName := strings.TrimSpace(name)
-	if trimmedName == "" {
-		return fmt.Errorf("场景名不能为空")
-	}
-
 	validatedCfg, err := validateConfigCopy(&cfg)
 	if err != nil {
 		return err
 	}
-
-	exists, err := a.sceneManager.Exists(trimmedName)
-	if err != nil {
+	if err := a.sceneManager.Save(name, validatedCfg); err != nil {
 		return err
 	}
-
-	if exists {
-		choice, dialogErr := wailsruntime.MessageDialog(a.ctx, wailsruntime.MessageDialogOptions{
-			Type:          wailsruntime.QuestionDialog,
-			Title:         "Replace Preset? / 覆盖预设？",
-			Message:       fmt.Sprintf("Preset \"%s\" already exists. Replace it?\n预设“%s”已存在，是否覆盖？", trimmedName, trimmedName),
-			Buttons:       []string{overwriteSceneButton, closeCancelButton},
-			DefaultButton: overwriteSceneButton,
-			CancelButton:  closeCancelButton,
-		})
-		if dialogErr != nil {
-			return dialogErr
-		}
-		if choice != overwriteSceneButton {
-			return fmt.Errorf("已取消保存")
-		}
-	}
-
-	return a.savePreset(trimmedName, validatedCfg)
+	a.setConfigBaseline(validatedCfg, strings.TrimSpace(name))
+	return nil
 }
 
 // DeleteScene 删除场景

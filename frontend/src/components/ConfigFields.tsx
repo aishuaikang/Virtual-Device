@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AutoComplete, Collapse, Input, Switch } from "antd";
 import { useTranslation } from "react-i18next";
 import { ClearableNumberInput, ClearableTextInput } from "./ClearableInput";
 
@@ -11,7 +12,7 @@ export function Field({
 }) {
   return (
     <label className="field">
-      <span>{label}</span>
+      <span className="field-label">{label}</span>
       {children}
     </label>
   );
@@ -54,27 +55,34 @@ export function TextField({
   value,
   onChange,
   disabled,
-  list,
+  options,
   placeholder,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
-  list?: string;
+  options?: string[];
   placeholder?: string;
 }) {
   return (
     <Field label={label}>
-      <ClearableTextInput
+      {options ? <AutoComplete
+        value={value}
+        onChange={onChange}
+        options={options.map((option) => ({ value: option }))}
+        filterOption={(input, option) => !!option?.value.toLowerCase().includes(input.toLowerCase())}
+        disabled={disabled}
+      >
+        <Input aria-label={label} placeholder={placeholder} spellCheck={false} allowClear />
+      </AutoComplete> : <ClearableTextInput
         aria-label={label}
         value={value}
         onValueChange={onChange}
         disabled={disabled}
-        list={list}
         placeholder={placeholder}
         spellCheck={false}
-      />
+      />}
     </Field>
   );
 }
@@ -131,26 +139,17 @@ export function Toggle({
   disabled?: boolean;
 }) {
   return (
-    <label className="switch" title={label}>
-      <input
-        type="checkbox"
-        role="switch"
-        aria-label={label}
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        disabled={disabled}
-      />
-      <span aria-hidden="true" />
-    </label>
+    <Switch className="module-switch" size="small" title={label} aria-label={label}
+      checked={checked} onChange={onChange} disabled={disabled} />
   );
 }
 
 export function Advanced({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   return (
-    <details className="advanced">
-      <summary>{t("config.advanced")}</summary>
-      <div className="form-grid">{children}</div>
-    </details>
+    <Collapse className="advanced" ghost items={[{
+      key: "advanced", label: t("config.advanced"),
+      children: <div className="form-grid">{children}</div>,
+    }]} />
   );
 }

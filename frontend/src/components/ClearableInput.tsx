@@ -1,43 +1,8 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type FocusEvent,
-  type InputHTMLAttributes,
-} from "react";
-import i18n from "../i18n";
+import { Input, InputNumber, Button, type InputProps, type InputNumberProps } from "antd";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-function joinClassNames(...classes: Array<string | undefined>) {
-  return classes.filter(Boolean).join(" ");
-}
-
-function ClearButton({
-  visible,
-  label,
-  onClick,
-}: {
-  visible: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  if (!visible) return null;
-
-  return (
-    <button
-      type="button"
-      className="input-clear-btn"
-      aria-label={label}
-      title={label}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
-    >
-      ×
-    </button>
-  );
-}
-
-interface ClearableTextInputProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> {
+interface ClearableTextInputProps extends Omit<InputProps, "value" | "onChange"> {
   value: string;
   onValueChange: (value: string) => void;
   containerClassName?: string;
@@ -45,134 +10,79 @@ interface ClearableTextInputProps
 }
 
 export function ClearableTextInput({
-  value,
-  onValueChange,
-  className,
-  containerClassName,
-  clearLabel,
-  disabled,
-  ...props
+  value, onValueChange, className, containerClassName, clearLabel, ...props
 }: ClearableTextInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const resolvedClearLabel = clearLabel ?? i18n.t("app.clearInput");
-
+  const { t } = useTranslation();
   return (
-    <div className={joinClassNames("clearable-input", containerClassName)}>
-      <input
-        {...props}
-        ref={inputRef}
-        className={className}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onValueChange(e.target.value)}
-      />
-      <ClearButton
-        visible={!disabled && value !== ""}
-        label={resolvedClearLabel}
-        onClick={() => {
-          onValueChange("");
-          inputRef.current?.focus();
-        }}
-      />
-    </div>
+    <Input
+      {...props}
+      className={["clearable-input", containerClassName, className].filter(Boolean).join(" ")}
+      value={value}
+      onChange={(event) => onValueChange(event.target.value)}
+      allowClear={{ clearIcon: <span aria-label={clearLabel ?? t("app.clearInput")}>×</span> }}
+    />
   );
 }
 
-interface ClearableNumberInputProps
-  extends Omit<
-    InputHTMLAttributes<HTMLInputElement>,
-    "type" | "value" | "onChange"
-  > {
+interface ClearableNumberInputProps extends Omit<InputNumberProps<number>, "value" | "onChange" | "step"> {
   value?: number | null;
   onValueChange: (value: number) => void;
+  step?: number | "any";
   containerClassName?: string;
   clearLabel?: string;
 }
 
-function toDraftValue(value?: number | null) {
-  if (value === null || value === undefined || !Number.isFinite(value))
-    return "";
-  return String(value);
+function numberOrNull(value?: number | null) {
+  return value != null && Number.isFinite(value) ? value : null;
 }
 
 export function ClearableNumberInput({
-  value,
-  onValueChange,
-  className,
-  containerClassName,
-  clearLabel,
-  disabled,
-  onFocus,
-  onBlur,
-  ...props
+  value, onValueChange, className, containerClassName, clearLabel, disabled,
+  onFocus, onBlur, step, ...props
 }: ClearableNumberInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const isFocusedRef = useRef(false);
-  const [draft, setDraft] = useState(() => toDraftValue(value));
-  const resolvedClearLabel = clearLabel ?? i18n.t("app.clearInput");
-
+  const { t } = useTranslation();
+  const inputRef = useRef<{ focus: () => void } | null>(null);
+  const focused = useRef(false);
+  const [draft, setDraft] = useState(() => numberOrNull(value));
   useEffect(() => {
-    if (!isFocusedRef.current) {
-      setDraft(toDraftValue(value));
-    }
+    if (!focused.current) setDraft(numberOrNull(value));
   }, [value]);
 
-  const handleFocus = (event: FocusEvent<HTMLInputElement>) => {
-    isFocusedRef.current = true;
-    onFocus?.(event);
-  };
-
-  const handleBlur = (event: FocusEvent<HTMLInputElement>) => {
-    isFocusedRef.current = false;
-
-    if (draft === "") {
-      setDraft(toDraftValue(value));
-      onBlur?.(event);
-      return;
-    }
-
-    const parsed = Number(draft);
-    if (!Number.isFinite(parsed)) {
-      setDraft(toDraftValue(value));
-      onBlur?.(event);
-      return;
-    }
-
-    onValueChange(parsed);
-    setDraft(String(parsed));
-    onBlur?.(event);
-  };
-
   return (
-    <div className={joinClassNames("clearable-input", containerClassName)}>
-      <input
-        {...props}
-        ref={inputRef}
-        type="number"
-        className={className}
-        value={draft}
-        disabled={disabled}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        onChange={(e) => {
-          const next = e.target.value;
-          setDraft(next);
-          if (next === "") return;
-
-          const parsed = Number(next);
-          if (Number.isFinite(parsed)) {
-            onValueChange(parsed);
-          }
-        }}
-      />
-      <ClearButton
-        visible={!disabled && draft !== ""}
-        label={resolvedClearLabel}
-        onClick={() => {
-          setDraft("");
-          inputRef.current?.focus();
-        }}
-      />
-    </div>
+    <InputNumber<number>
+      {...props}
+      ref={(input) => { inputRef.current = input; }}
+      className={["clearable-input", containerClassName, className].filter(Boolean).join(" ")}
+      value={draft}
+      disabled={disabled}
+      step={step === "any" ? undefined : step}
+      changeOnBlur={false}
+      onFocus={(event) => {
+        focused.current = true;
+        onFocus?.(event);
+      }}
+      onBlur={(event) => {
+        focused.current = false;
+        if (draft === null) setDraft(numberOrNull(value));
+        onBlur?.(event);
+      }}
+      onChange={(next) => {
+        setDraft(next);
+        if (next !== null && Number.isFinite(next)) onValueChange(next);
+      }}
+      suffix={!disabled && draft !== null ? (
+        <Button
+          type="text"
+          className="number-clear"
+          aria-label={clearLabel ?? t("app.clearInput")}
+          title={clearLabel ?? t("app.clearInput")}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            setDraft(null);
+            inputRef.current?.focus();
+          }}
+        >×</Button>
+      ) : undefined}
+    />
   );
 }

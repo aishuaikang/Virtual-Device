@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Button, Select } from "antd";
 import {
   DeleteScene,
   ExportScene,
@@ -14,6 +15,7 @@ import { config } from "../../wailsjs/go/models";
 import { ClearableTextInput } from "./ClearableInput";
 import Icon from "./Icon";
 import Modal from "./Modal";
+import ErrorMessage from "./ErrorMessage";
 
 interface Props {
   currentCfg: config.Config;
@@ -34,7 +36,7 @@ export default function SceneSelector({
   const [scenes, setScenes] = useState<string[]>([]);
   const [selected, setSelected] = useState("");
   const [dialog, setDialog] = useState<
-    "save" | "manage" | "rename" | "delete" | "switch" | null
+    "save" | "manage" | "rename" | "delete" | "switch" | "replace" | null
   >(null);
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
@@ -90,16 +92,24 @@ export default function SceneSelector({
     } else void perform(() => load(sceneName));
   };
 
-  const save = async () => {
+  const save = async (overwrite = false) => {
     if (running || !name.trim()) return;
+    if (!overwrite) {
+      const latestScenes = (await ListScenes()) ?? [];
+      setScenes(latestScenes);
+      if (latestScenes.includes(name.trim())) {
+        setDialog("replace");
+        return;
+      }
+    }
     const latest = await getCurrentConfig();
     if (!latest) return;
-    await SaveScene(name.trim(), latest);
+    await SaveScene(name.trim(), latest, overwrite);
     baseline.current = JSON.stringify(latest);
     setSelected(name.trim());
     await refresh();
     setDialog(null);
-    onToast(t("scene.saved"), "success");
+    onToast("scene.saved", "success");
   };
 
   const importScene = async () => {
@@ -138,29 +148,22 @@ export default function SceneSelector({
     rename: t("scene.rename"),
     delete: t("scene.delete"),
     switch: t("scene.switch"),
+    replace: t("scene.replace"),
   };
 
   return (
     <div className="scene-selector">
-      <select
+      <Select
         className="scene-select"
         aria-label={t("scene.label")}
         value={selected}
         disabled={running || busy}
-        onChange={(event) => requestLoad(event.target.value)}
-      >
-        <option value="">
-          {t("scene.default")}
-          {dirty && selected === "" ? " *" : ""}
-        </option>
-        {scenes.map((scene) => (
-          <option key={scene} value={scene}>
-            {scene}
-            {dirty && selected === scene ? " *" : ""}
-          </option>
-        ))}
-      </select>
-      <button
+        onChange={requestLoad}
+        options={[{ value: "", label: `${t("scene.default")}${dirty && selected === "" ? " *" : ""}` },
+          ...scenes.map((scene) => ({ value: scene, label: `${scene}${dirty && selected === scene ? " *" : ""}` })),
+        ]}
+      />
+      <Button type="text"
         className="icon-button"
         title={t("scene.save")}
         aria-label={t("scene.save")}
@@ -171,8 +174,8 @@ export default function SceneSelector({
         }}
       >
         <Icon name="save" />
-      </button>
-      <button
+      </Button>
+      <Button type="text"
         className="icon-button"
         title={t("scene.manage")}
         aria-label={t("scene.manage")}
@@ -185,19 +188,19 @@ export default function SceneSelector({
         }
       >
         <Icon name="more" />
-      </button>
+      </Button>
       {dialog && (
         <Modal title={titles[dialog]} onClose={close}>
           {operationError && (
-            <p className="dialog-error inline-error" role="alert">
-              {operationError}
-            </p>
+            <div className="dialog-error inline-error" role="alert">
+              <ErrorMessage error={operationError} messageKey="errors.scene" />
+            </div>
           )}
           {(dialog === "save" || dialog === "rename") && (
             <form
               onSubmit={(event) => {
                 event.preventDefault();
-                void perform(dialog === "save" ? save : rename);
+                void perform(dialog === "save" ? () => save() : rename);
               }}
             >
               <div className="dialog-body">
@@ -212,20 +215,20 @@ export default function SceneSelector({
                 />
               </div>
               <footer className="dialog-actions">
-                <button
-                  type="button"
+                <Button type="default"
+                  htmlType="button"
                   className="button"
                   onClick={close}
                   disabled={busy}
                 >
                   {t("app.cancel")}
-                </button>
-                <button
+                </Button>
+                <Button type="primary" htmlType="submit"
                   className="button button-primary"
                   disabled={busy || !name.trim()}
                 >
                   {t(dialog === "save" ? "scene.save" : "app.confirm")}
-                </button>
+                </Button>
               </footer>
             </form>
           )}
@@ -233,24 +236,24 @@ export default function SceneSelector({
             <>
               <div className="scene-list dialog-body">
                 <div className="scene-row">
-                  <button
+                  <Button type="text"
                     className={`scene-name${selected === "" ? " is-current" : ""}`}
                     disabled={running || busy}
                     onClick={() => requestLoad("")}
                   >
                     {t("scene.default")}
-                  </button>
+                  </Button>
                 </div>
                 {scenes.map((scene) => (
                   <div className="scene-row" key={scene}>
-                    <button
+                    <Button type="text"
                       className={`scene-name${scene === selected ? " is-current" : ""}`}
                       disabled={running || busy}
                       onClick={() => requestLoad(scene)}
                     >
                       {scene}
-                    </button>
-                    <button
+                    </Button>
+                    <Button type="text"
                       className="button button-quiet"
                       disabled={running || busy}
                       onClick={() => {
@@ -260,8 +263,8 @@ export default function SceneSelector({
                       }}
                     >
                       {t("scene.rename")}
-                    </button>
-                    <button
+                    </Button>
+                    <Button type="text"
                       className="icon-button"
                       disabled={busy}
                       title={t("scene.export")}
@@ -273,8 +276,8 @@ export default function SceneSelector({
                       }
                     >
                       <Icon name="download" />
-                    </button>
-                    <button
+                    </Button>
+                    <Button type="text" danger
                       className="icon-button danger"
                       disabled={running || busy}
                       title={t("scene.delete")}
@@ -285,48 +288,48 @@ export default function SceneSelector({
                       }}
                     >
                       <Icon name="trash" />
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
               <footer className="dialog-actions">
-                <button
+                <Button type="default"
                   className="button"
                   disabled={running || busy}
                   onClick={() => void perform(importScene)}
                 >
                   {t("scene.import")}
-                </button>
-                <button className="button" onClick={close} disabled={busy}>
+                </Button>
+                <Button type="default" className="button" onClick={close} disabled={busy}>
                   {t("app.close")}
-                </button>
+                </Button>
               </footer>
             </>
           )}
-          {(dialog === "delete" || dialog === "switch") && (
+          {(dialog === "delete" || dialog === "switch" || dialog === "replace") && (
             <>
               <div className="dialog-body">
                 <p>
                   {dialog === "delete"
                     ? t("scene.confirmDelete", { name: subject })
-                    : t("scene.confirmSwitch")}
+                    : dialog === "replace" ? t("scene.confirmReplace", { name: name.trim() }) : t("scene.confirmSwitch")}
                 </p>
               </div>
               <footer className="dialog-actions">
-                <button className="button" onClick={close} disabled={busy}>
+                <Button type="default" className="button" onClick={() => dialog === "replace" ? setDialog("save") : close()} disabled={busy}>
                   {t("app.cancel")}
-                </button>
-                <button
+                </Button>
+                <Button type="primary" danger={dialog === "delete"}
                   className={`button ${dialog === "delete" ? "button-danger" : "button-primary"}`}
                   disabled={busy || running}
                   onClick={() =>
                     void perform(
-                      dialog === "delete" ? remove : () => load(subject),
+                      dialog === "delete" ? remove : dialog === "replace" ? () => save(true) : () => load(subject),
                     )
                   }
                 >
-                  {t(dialog === "delete" ? "scene.delete" : "scene.switch")}
-                </button>
+                  {t(dialog === "delete" ? "scene.delete" : dialog === "replace" ? "scene.replace" : "scene.switch")}
+                </Button>
               </footer>
             </>
           )}

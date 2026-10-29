@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Button, Select } from "antd";
 import {
   GetDefaultConfig,
   GetStatus,
   StartEngine,
   StopEngine,
+  SetLanguage,
   SyncCurrentConfig,
 } from "../wailsjs/go/main/App";
 import { config, engine } from "../wailsjs/go/models";
@@ -24,6 +26,9 @@ import Icon from "./components/Icon";
 import LogViewer from "./components/LogViewer";
 import SceneSelector from "./components/SceneSelector";
 import TargetEditor from "./components/TargetEditor";
+import ErrorMessage from "./components/ErrorMessage";
+import ExitConfirmation from "./components/ExitConfirmation";
+import { AVAILABLE_LANGUAGES, LANGUAGE_LABELS, changeLanguage, getCurrentLanguage, type SupportedLanguage } from "./i18n";
 import "./App.css";
 
 const DEVICE_ICONS = {
@@ -35,9 +40,7 @@ const DEVICE_ICONS = {
   jamming: "wave",
 } as const;
 
-function errorText(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
+type UIError = { cause: unknown; messageKey: string };
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -45,8 +48,8 @@ export default function App() {
   const [status, setStatus] = useState<engine.Status | null>(null);
   const [page, setPage] = useState<PageId>("detection");
   const [action, setAction] = useState<"starting" | "stopping" | null>(null);
-  const [error, setError] = useState("");
-  const [connectionError, setConnectionError] = useState("");
+  const [error, setError] = useState<UIError | null>(null);
+  const [connectionError, setConnectionError] = useState<UIError | null>(null);
   const [notice, setNotice] = useState<{
     message: string;
     type: "success" | "error";
@@ -58,10 +61,11 @@ export default function App() {
   const actionRef = useRef(false);
   const running = status?.running ?? false;
   const locked = running || action !== null;
+  const visibleError = error ?? connectionError;
 
   const notify = (message: string, type: "success" | "error") =>
     setNotice({ message, type });
-  const showError = (value: unknown) => setError(errorText(value));
+  const showError = (cause: unknown, messageKey = "errors.syncConfig") => setError({ cause, messageKey });
 
   const applyConfig = (value: config.Config) => {
     const next = new config.Config(value);
@@ -92,7 +96,7 @@ export default function App() {
     const next = await GetStatus();
     if (request === requestRef.current) {
       setStatus(next);
-      setConnectionError("");
+      setConnectionError(null);
     }
   }, []);
 
@@ -106,7 +110,7 @@ export default function App() {
         setCfg(next);
       })
       .catch((value) => {
-        if (!cancelled) showError(value);
+        if (!cancelled) showError(value, "errors.loadConfig");
       });
     return () => {
       cancelled = true;
@@ -120,7 +124,7 @@ export default function App() {
       try {
         await refreshStatus();
       } catch (value) {
-        if (!cancelled) setConnectionError(errorText(value));
+        if (!cancelled) setConnectionError({ cause: value, messageKey: "errors.status" });
       }
       if (!cancelled) timer = window.setTimeout(() => void poll(), 800);
     };
@@ -136,6 +140,7 @@ export default function App() {
     document.title = t("app.title");
     document.documentElement.lang = i18n.language;
     WindowSetTitle(t("app.title"));
+    void SetLanguage(getCurrentLanguage()).catch((value) => console.error("Unable to sync dialog language", value));
   }, [i18n.language, t]);
 
   useEffect(() => {
@@ -148,7 +153,7 @@ export default function App() {
     if (actionRef.current || !cfgRef.current) return;
     actionRef.current = true;
     setAction(running ? "stopping" : "starting");
-    setError("");
+    setError(null);
     try {
       if (running) await StopEngine();
       else {
@@ -157,7 +162,7 @@ export default function App() {
       }
       await refreshStatus();
     } catch (value) {
-      showError(value);
+      showError(value, running ? "errors.stop" : "errors.start");
     } finally {
       actionRef.current = false;
       setAction(null);
@@ -167,7 +172,7 @@ export default function App() {
   if (!cfg)
     return (
       <div className="loading" role="status">
-        {error || t("app.loading")}
+        {error ? <ErrorMessage error={error.cause} messageKey={error.messageKey} /> : t("app.loading")}
       </div>
     );
 
@@ -184,6 +189,7 @@ export default function App() {
 
   return (
     <div className="simulator">
+      <ExitConfirmation beforeSave={currentConfig} />
       <aside className="device-sidebar">
         <div className="app-brand">
           <span className="app-brand-icon" aria-hidden="true">
@@ -219,7 +225,7 @@ export default function App() {
                   key={id}
                   className={`device-item${page === id ? " is-selected" : ""}${deviceEnabled(cfg, id) ? "" : " is-disabled"}`}
                 >
-                  <button
+                  <Button type="text"
                     className="device-select"
                     onClick={() => setPage(id)}
                     aria-current={page === id ? "page" : undefined}
@@ -234,7 +240,7 @@ export default function App() {
                       </span>
                       <code title={endpoint}>{endpoint || "—"}</code>
                     </span>
-                  </button>
+                  </Button>
                   <Toggle
                     label={t("config.enableModule", {
                       name: t(`devices.${id}`),
@@ -249,7 +255,7 @@ export default function App() {
               );
             })}
           </nav>
-          <button
+          <Button type="text"
             className={`targets-nav${page === "targets" ? " is-selected" : ""}`}
             onClick={() => setPage("targets")}
             aria-current={page === "targets" ? "page" : undefined}
@@ -258,7 +264,7 @@ export default function App() {
             <Icon name="map" />
             <span>{t("config.targetsAndPosition")}</span>
             <span className="count">{cfg.predefined_drones?.length || ""}</span>
-          </button>
+          </Button>
         </div>
         <div className="sidebar-footer">
           <span className={`engine-state${running ? " is-running" : ""}`}>
@@ -284,16 +290,14 @@ export default function App() {
               )}
             </h1>
           </div>
-          <button
-            className="button button-quiet language-button"
-            onClick={() =>
-              void i18n.changeLanguage(i18n.language === "zh" ? "en" : "zh")
-            }
-            aria-label={t("app.language")}
-          >
-            <Icon name="globe" />
-            {i18n.language === "zh" ? "EN" : "中文"}
-          </button>
+          {AVAILABLE_LANGUAGES.length > 1 && (
+            <div className="language-select">
+              <Icon name="globe" />
+              <Select<SupportedLanguage> aria-label={t("app.language")} value={getCurrentLanguage()}
+                onChange={(language) => void changeLanguage(language)}
+                options={AVAILABLE_LANGUAGES.map((language) => ({ value: language, label: LANGUAGE_LABELS[language] }))} />
+            </div>
+          )}
         </header>
 
         <div className="session-toolbar">
@@ -310,7 +314,7 @@ export default function App() {
               <i />
               {t(`app.${action ?? (running ? "running" : "stopped")}`)}
             </span>
-            <button
+            <Button type={running ? "default" : "primary"} danger={running}
               className={`button run-button${running ? " is-stop" : ""}`}
               onClick={() => void run()}
               disabled={action !== null || (!running && enabledCount === 0)}
@@ -318,23 +322,23 @@ export default function App() {
             >
               <Icon name={running ? "stop" : "play"} />
               {t(`app.${action ?? (running ? "stop" : "start")}`)}
-            </button>
+            </Button>
           </div>
         </div>
 
-        {(error || connectionError) && (
+        {visibleError && (
           <div className="error-banner" role="alert">
-            <span>{error || connectionError}</span>
-            <button
+            <ErrorMessage error={visibleError.cause} messageKey={visibleError.messageKey} />
+            <Button type="text"
               className="icon-button"
               onClick={() => {
-                setError("");
-                setConnectionError("");
+                setError(null);
+                setConnectionError(null);
               }}
               aria-label={t("app.close")}
             >
               <Icon name="close" />
-            </button>
+            </Button>
           </div>
         )}
 
@@ -409,7 +413,7 @@ export default function App() {
           className={`notice notice-${notice.type}`}
           role={notice.type === "error" ? "alert" : "status"}
         >
-          {notice.message}
+          {notice.type === "error" ? <ErrorMessage error={notice.message} messageKey="errors.scene" /> : t(notice.message)}
         </div>
       )}
     </div>

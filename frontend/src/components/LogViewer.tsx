@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Button, Checkbox } from "antd";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { ClearableTextInput } from "./ClearableInput";
 import Icon from "./Icon";
@@ -53,7 +54,7 @@ export default function LogViewer() {
   return (
     <section className={`log-drawer${open ? " is-open" : ""}`}>
       <div className="log-toolbar">
-        <button
+        <Button type="text"
           className="log-toggle"
           onClick={() => setOpen(!open)}
           aria-expanded={open}
@@ -63,7 +64,7 @@ export default function LogViewer() {
           {t("log.title")}
           <span className="count">{lines.length}</span>
           <Icon className="log-chevron" name="chevron" />
-        </button>
+        </Button>
         {open && (
           <>
             <ClearableTextInput
@@ -73,15 +74,13 @@ export default function LogViewer() {
               value={filter}
               onValueChange={setFilter}
             />
-            <label className="log-follow">
-              <input
-                type="checkbox"
+            <Checkbox className="log-follow"
                 checked={follow}
                 onChange={(event) => setFollow(event.target.checked)}
-              />
+              >
               {t("log.follow")}
-            </label>
-            <button
+            </Checkbox>
+            <Button type="text"
               className="icon-button"
               onClick={exportLogs}
               disabled={!lines.length}
@@ -89,8 +88,8 @@ export default function LogViewer() {
               aria-label={t("log.export")}
             >
               <Icon name="download" />
-            </button>
-            <button
+            </Button>
+            <Button type="text"
               className="icon-button"
               title={t("app.clear")}
               aria-label={t("log.clear")}
@@ -101,7 +100,7 @@ export default function LogViewer() {
               disabled={!lines.length}
             >
               <Icon name="trash" />
-            </button>
+            </Button>
           </>
         )}
       </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Button, Select } from "antd";
 import { config } from "../../wailsjs/go/models";
 import {
   adjustJointRSSI,
@@ -153,18 +154,15 @@ export default function JointDirectionEditor({
         <>
           <p className="joint-hint">{t("joint.setupHint")}</p>
           <div className="joint-target-toolbar">
-            <select
+            <Select<number>
               aria-label={t("joint.target")}
               value={index}
-              onChange={(event) => setSelected(Number(event.target.value))}
-            >
-              {targets.map((item, i) => (
-                <option key={i} value={i}>
-                  {t("config.targetNumber", { index: i + 1 })} · {item.model}
-                </option>
-              ))}
-            </select>
-            <button
+              onChange={setSelected}
+              options={targets.map((item, i) => ({ value: i,
+                label: `${t("config.targetNumber", { index: i + 1 })} · ${item.model}`,
+              }))}
+            />
+            <Button type="text"
               className="button button-quiet"
               disabled={disabled}
               onClick={() => {
@@ -185,8 +183,8 @@ export default function JointDirectionEditor({
             >
               <Icon name="plus" />
               {t("config.add")}
-            </button>
-            <button
+            </Button>
+            <Button type="text" danger
               className="icon-button danger"
               aria-label={t("config.deleteTarget")}
               title={t("config.deleteTarget")}
@@ -197,7 +195,7 @@ export default function JointDirectionEditor({
               }}
             >
               <Icon name="trash" />
-            </button>
+            </Button>
           </div>
           {target && (
             <>
@@ -249,7 +247,7 @@ export default function JointDirectionEditor({
                     {(
                       ["all", "missing", "single", "close", "none"] as const
                     ).map((mode) => (
-                      <button
+                      <Button type="default"
                         key={mode}
                         className="button"
                         onClick={() => preset(mode)}
@@ -259,7 +257,7 @@ export default function JointDirectionEditor({
                         }
                       >
                         {t(`joint.${mode}`)}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                   <div className="joint-table-wrap">
