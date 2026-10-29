@@ -29,6 +29,7 @@ type Status struct {
 	Modules        []ModuleStatus                  `json:"modules"`
 	DroneCount     int                             `json:"droneCount"`
 	DirectedStrike *modules.DirectedStrikeSnapshot `json:"directedStrike,omitempty"`
+	Relay16        *modules.Relay16Snapshot        `json:"relay16,omitempty"`
 	PrecisionDF    *modules.PrecisionDFSnapshot    `json:"precisionDF,omitempty"`
 }
 
@@ -45,6 +46,7 @@ type Engine struct {
 	detections     []modules.DetectionUDPServerModule
 	jamming        modules.JammingModule
 	directedStrike modules.DirectedStrikeModule
+	relay16        *modules.Relay16Module
 	precisionDF    *modules.PrecisionDFModule
 
 	analysisMock   mocks.MockDataGenerator
@@ -74,6 +76,7 @@ func (e *Engine) Start(cfg *config.Config) error {
 	e.detections = nil
 	e.jamming = nil
 	e.directedStrike = nil
+	e.relay16 = nil
 	e.precisionDF = nil
 	e.jointDirection = nil
 	if cfg.JointDirection.Enabled {
@@ -144,6 +147,21 @@ func (e *Engine) Start(cfg *config.Config) error {
 		}
 		e.precisionDF = precisionDF
 	}
+	if cfg.Relay16.Enabled {
+		relay16, err := modules.NewRelay16Module(cfg.Relay16)
+		if err != nil {
+			if e.directedStrike != nil {
+				e.directedStrike.Stop()
+				e.directedStrike = nil
+			}
+			if e.precisionDF != nil {
+				e.precisionDF.Stop()
+				e.precisionDF = nil
+			}
+			return fmt.Errorf("启动定向窄带模拟器: %w", err)
+		}
+		e.relay16 = relay16
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	e.ctx = ctx
@@ -178,6 +196,10 @@ func (e *Engine) Start(cfg *config.Config) error {
 	if e.precisionDF != nil {
 		e.wg.Add(1)
 		go func() { defer e.wg.Done(); e.precisionDF.Start() }()
+	}
+	if e.relay16 != nil {
+		e.wg.Add(1)
+		go func() { defer e.wg.Done(); e.relay16.Start() }()
 	}
 
 	if cfg.RandomDroneRefreshInterval > 0 {
@@ -254,6 +276,9 @@ func (e *Engine) Stop() {
 	if e.precisionDF != nil {
 		e.precisionDF.Stop()
 	}
+	if e.relay16 != nil {
+		e.relay16.Stop()
+	}
 	e.running = false
 
 	done := make(chan struct{})
@@ -285,6 +310,7 @@ func (e *Engine) GetStatus() Status {
 	detections := append([]modules.DetectionUDPServerModule(nil), e.detections...)
 	jamming := e.jamming
 	directedStrike := e.directedStrike
+	relay16 := e.relay16
 	precisionDF := e.precisionDF
 	analysisMock := e.analysisMock
 	detectionMocks := append([]mocks.MockDataGenerator(nil), e.detectionMocks...)
@@ -299,6 +325,7 @@ func (e *Engine) GetStatus() Status {
 				{Name: "fpv"},
 				{Name: "jamming"},
 				{Name: "directed_strike"},
+				{Name: "relay16"},
 				{Name: "precision_df"},
 			},
 		}
@@ -350,6 +377,17 @@ func (e *Engine) GetStatus() Status {
 		directedStrikeStatus.LastActivityAt = snapshot.LastActivityAt
 		directedStrikeStatus.ClientAddresses = append([]string(nil), snapshot.ClientAddresses...)
 	}
+	var relay16Snapshot *modules.Relay16Snapshot
+	relay16Status := ModuleStatus{Name: "relay16"}
+	if relay16 != nil {
+		snapshot := relay16.Snapshot()
+		relay16Snapshot = &snapshot
+		relay16Status.Connected = snapshot.Connected
+		relay16Status.ConnectionCount = snapshot.ActiveConnections
+		relay16Status.SentCount = int64(snapshot.SentFrames)
+		relay16Status.LastActivityAt = snapshot.LastActivityAt
+		relay16Status.ClientAddresses = snapshot.ClientAddresses
+	}
 	var precisionDFSnapshot *modules.PrecisionDFSnapshot
 	precisionDFStatus := ModuleStatus{Name: "precision_df"}
 	if precisionDF != nil {
@@ -368,6 +406,7 @@ func (e *Engine) GetStatus() Status {
 		Running:        true,
 		DroneCount:     droneCount,
 		DirectedStrike: directedStrikeSnapshot,
+		Relay16:        relay16Snapshot,
 		PrecisionDF:    precisionDFSnapshot,
 		Modules: []ModuleStatus{
 			{Name: "analysis", Connected: analysisCount > 0, ConnectionCount: analysisCount},
@@ -375,6 +414,7 @@ func (e *Engine) GetStatus() Status {
 			{Name: "fpv", Connected: fpvCount > 0, ConnectionCount: fpvCount},
 			{Name: "jamming", Connected: jammingCount > 0, ConnectionCount: jammingCount},
 			directedStrikeStatus,
+			relay16Status,
 			precisionDFStatus,
 		},
 	}

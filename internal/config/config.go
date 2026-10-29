@@ -66,6 +66,14 @@ type DirectedStrikeConfig struct {
 	ResponseDelayMS int    `json:"response_delay_ms"`
 }
 
+// Relay16Config configures the independent type-12 Modbus TCP simulator.
+type Relay16Config struct {
+	Enabled         bool   `json:"enabled"`
+	Host            string `json:"host"`
+	Port            int    `json:"port"`
+	ResponseDelayMS int    `json:"response_delay_ms"`
+}
+
 // PrecisionDFConfig configures the receiver's command and data TCP listeners.
 type PrecisionDFConfig struct {
 	Enabled     bool    `json:"enabled"`
@@ -208,6 +216,7 @@ type Config struct {
 	FPV                        BaseConfig           `json:"fpv"`                            // FPV模块配置
 	Jamming                    BaseConfig           `json:"jamming"`                        // 干扰模块配置
 	DirectedStrike             DirectedStrikeConfig `json:"directed_strike"`                // 定向打击设备模拟器配置
+	Relay16                    Relay16Config        `json:"relay16"`                        // 定向窄带继电器模拟器配置
 	PrecisionDF                PrecisionDFConfig    `json:"precision_df"`                   // 精准测向接收机模拟器配置
 }
 
@@ -269,6 +278,7 @@ func NormalizeConfig(cfg *Config) {
 	cfg.FPV.Hosts = normalizeHosts(cfg.FPV.Hosts)
 	cfg.Jamming.Hosts = normalizeHosts(cfg.Jamming.Hosts)
 	cfg.DirectedStrike.Host = strings.TrimSpace(cfg.DirectedStrike.Host)
+	cfg.Relay16.Host = strings.TrimSpace(cfg.Relay16.Host)
 	cfg.PrecisionDF.Host = strings.TrimSpace(cfg.PrecisionDF.Host)
 	cfg.Analysis.O3PlusO4DataFile = normalizeOptionalString(cfg.Analysis.O3PlusO4DataFile)
 
@@ -312,6 +322,7 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		FPV                        BaseConfig            `json:"fpv"`
 		Jamming                    BaseConfig            `json:"jamming"`
 		DirectedStrike             *DirectedStrikeConfig `json:"directed_strike"`
+		Relay16                    json.RawMessage       `json:"relay16"`
 		PrecisionDF                json.RawMessage       `json:"precision_df"`
 	}
 
@@ -343,6 +354,12 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		c.DirectedStrike = *raw.DirectedStrike
 	} else {
 		c.DirectedStrike = defaultDirectedStrikeConfig(false)
+	}
+	c.Relay16 = defaultRelay16Config()
+	if len(raw.Relay16) > 0 {
+		if err := json.Unmarshal(raw.Relay16, &c.Relay16); err != nil {
+			return err
+		}
 	}
 	c.PrecisionDF = defaultPrecisionDFConfig()
 	if len(raw.PrecisionDF) > 0 {
@@ -536,9 +553,12 @@ func DefaultConfig() *Config {
 			Port:     10003,
 		},
 		DirectedStrike: defaultDirectedStrikeConfig(true),
+		Relay16:        defaultRelay16Config(),
 		PrecisionDF:    defaultPrecisionDFConfig(),
 		JointDirection: JointDirectionConfig{HopIntervalMS: 1500},
 	}
+	cfg.Relay16.Enabled = true
+	cfg.PrecisionDF.Enabled = true
 	NormalizeConfig(cfg)
 	return cfg
 }
@@ -550,6 +570,10 @@ func defaultDirectedStrikeConfig(enabled bool) DirectedStrikeConfig {
 		Port:            19000,
 		ResponseDelayMS: 0,
 	}
+}
+
+func defaultRelay16Config() Relay16Config {
+	return Relay16Config{Host: "0.0.0.0", Port: 1030}
 }
 
 func defaultPrecisionDFConfig() PrecisionDFConfig {
@@ -718,6 +742,9 @@ func validateConfig(config *Config) error {
 	if err := validateDirectedStrikeConfig(&config.DirectedStrike); err != nil {
 		return fmt.Errorf("定向打击模拟器配置错误: %v", err)
 	}
+	if err := validateRelay16Config(&config.Relay16); err != nil {
+		return fmt.Errorf("定向窄带模拟器配置错误: %v", err)
+	}
 	if err := validatePrecisionDFConfig(&config.PrecisionDF); err != nil {
 		return fmt.Errorf("精准测向模拟器配置错误: %v", err)
 	}
@@ -761,6 +788,22 @@ func validateDirectedStrikeConfig(config *DirectedStrikeConfig) error {
 		return fmt.Errorf("监听端口必须在1到65535之间")
 	}
 	if config.ResponseDelayMS < 0 || config.ResponseDelayMS > 10000 {
+		return fmt.Errorf("回执延迟必须在0到10000毫秒之间")
+	}
+	return nil
+}
+
+func validateRelay16Config(c *Relay16Config) error {
+	if !c.Enabled {
+		return nil
+	}
+	if c.Host == "" {
+		return fmt.Errorf("监听地址不能为空")
+	}
+	if c.Port < 1 || c.Port > 65535 {
+		return fmt.Errorf("监听端口必须在1到65535之间")
+	}
+	if c.ResponseDelayMS < 0 || c.ResponseDelayMS > 10000 {
 		return fmt.Errorf("回执延迟必须在0到10000毫秒之间")
 	}
 	return nil

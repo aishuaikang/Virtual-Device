@@ -5,6 +5,7 @@ export const DEVICES = [
   { id: "analysis" },
   { id: "precision_df" },
   { id: "directed_strike" },
+  { id: "relay16" },
   { id: "fpv" },
   { id: "jamming" },
 ] as const;

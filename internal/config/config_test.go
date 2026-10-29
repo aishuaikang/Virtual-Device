@@ -154,6 +154,71 @@ func TestValidatePrecisionDFConfig(t *testing.T) {
 	}
 }
 
+func TestRelay16ConfigDefaultsAndRoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  string
+	}{
+		{"legacy scene", `{}`},
+		{"null module", `{"relay16":null}`},
+		{"partial module", `{"relay16":{"enabled":false}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var cfg Config
+			if err := json.Unmarshal([]byte(tc.raw), &cfg); err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Relay16.Enabled || cfg.Relay16.Host != "0.0.0.0" || cfg.Relay16.Port != 1030 {
+				t.Fatalf("unexpected scene defaults: %+v", cfg.Relay16)
+			}
+		})
+	}
+	cfg := DefaultConfig()
+	if !cfg.Relay16.Enabled {
+		t.Fatal("default config must enable the relay simulator")
+	}
+	cfg.Relay16 = Relay16Config{Enabled: true, Host: " 127.0.0.1 ", Port: 15030, ResponseDelayMS: 50}
+	if err := ValidateConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Relay16.Host != "127.0.0.1" {
+		t.Fatal("relay host was not normalized")
+	}
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored Config
+	if err := json.Unmarshal(raw, &restored); err != nil {
+		t.Fatal(err)
+	}
+	if restored.Relay16 != cfg.Relay16 {
+		t.Fatalf("relay scene round trip changed config: %+v", restored.Relay16)
+	}
+}
+
+func TestValidateRelay16Config(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*Relay16Config)
+	}{
+		{"empty host", func(c *Relay16Config) { c.Host = " " }},
+		{"zero port", func(c *Relay16Config) { c.Port = 0 }},
+		{"high port", func(c *Relay16Config) { c.Port = 65536 }},
+		{"negative delay", func(c *Relay16Config) { c.ResponseDelayMS = -1 }},
+		{"high delay", func(c *Relay16Config) { c.ResponseDelayMS = 10001 }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Relay16.Enabled = true
+			tc.mutate(&cfg.Relay16)
+			if err := ValidateConfig(cfg); err == nil {
+				t.Fatal("invalid relay config accepted")
+			}
+		})
+	}
+}
+
 func TestValidateConfigRejectsInvalidLongitude(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.CenterPoint.Lng = 181
@@ -182,6 +247,30 @@ func TestDefaultConfigIncludesThreeDetectionModules(t *testing.T) {
 	}
 }
 
+func TestDefaultConfigEnablesAllModules(t *testing.T) {
+	cfg := DefaultConfig()
+	for name, enabled := range map[string]bool{
+		"detection":       cfg.Detection.Enabled,
+		"analysis":        cfg.Analysis.Enabled,
+		"precision_df":    cfg.PrecisionDF.Enabled,
+		"directed_strike": cfg.DirectedStrike.Enabled,
+		"relay16":         cfg.Relay16.Enabled,
+		"fpv":             cfg.FPV.Enabled,
+		"jamming":         cfg.Jamming.Enabled,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if !enabled {
+				t.Fatal("default module must be enabled")
+			}
+		})
+	}
+	for i, detection := range cfg.Detections {
+		if !detection.Enabled {
+			t.Errorf("default detection %d must be enabled", i)
+		}
+	}
+}
+
 func TestDefaultConfigEnablesDirectedStrikeSimulator(t *testing.T) {
 	cfg := DefaultConfig()
 
@@ -190,6 +279,22 @@ func TestDefaultConfigEnablesDirectedStrikeSimulator(t *testing.T) {
 	}
 	if cfg.DirectedStrike.Host != "0.0.0.0" || cfg.DirectedStrike.Port != 19000 {
 		t.Fatalf("unexpected directed strike listen address: %#v", cfg.DirectedStrike)
+	}
+}
+
+func TestSavedConfigPreservesDisabledSimulatorModules(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Relay16.Enabled, cfg.PrecisionDF.Enabled = false, false
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored Config
+	if err := json.Unmarshal(raw, &restored); err != nil {
+		t.Fatal(err)
+	}
+	if restored.Relay16.Enabled || restored.PrecisionDF.Enabled {
+		t.Fatal("saved module switches must not be replaced by new defaults")
 	}
 }
 

@@ -8,5 +8,6 @@ const (
 	ModuleTypeFPV            ModuleType = "fpv"
 	ModuleTypeJamming        ModuleType = "jamming" // 新增干扰打击类型
 	ModuleTypeDirectedStrike ModuleType = "directed_strike"
+	ModuleTypeRelay16        ModuleType = "relay16"
 	ModuleTypePrecisionDF    ModuleType = "precision_df"
 )

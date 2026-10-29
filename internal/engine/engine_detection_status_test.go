@@ -45,6 +45,9 @@ func TestGetStatusMarksDetectionConnectedAfterUDPCommand(t *testing.T) {
 	cfg.Analysis.Enabled = false
 	cfg.FPV.Enabled = false
 	cfg.Jamming.Enabled = false
+	cfg.DirectedStrike.Enabled = false
+	cfg.PrecisionDF.Enabled = false
+	cfg.Relay16.Enabled = false
 	cfg.Detections = []config.DetectionConfig{
 		{
 			Enabled:           true,

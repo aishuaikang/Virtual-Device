@@ -88,6 +88,7 @@ func TestJointDirectionUDPScenario(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Analysis.Enabled, cfg.FPV.Enabled, cfg.Jamming.Enabled = false, false, false
 	cfg.DirectedStrike.Enabled, cfg.PrecisionDF.Enabled = false, false
+	cfg.Relay16.Enabled = false
 	cfg.MinPushSpeed, cfg.MaxPushSpeed = 20, 20
 	cfg.RandomDroneRefreshInterval = 0
 	ports := make(map[int]bool)

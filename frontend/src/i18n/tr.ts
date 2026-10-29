@@ -10,7 +10,7 @@ const tr: Messages = {
   },
   devices: {
     detection: "Tespit", analysis: "Analiz", precision_df: "Hassas yön bulma",
-    directed_strike: "Yönlü müdahale", fpv: "FPV", jamming: "Karıştırma",
+    directed_strike: "Yönlü müdahale", relay16: "Yönlü dar bant", fpv: "FPV", jamming: "Karıştırma",
   },
   states: { disabled: "Devre dışı", stopped: "Durduruldu", waiting: "Bağlantı bekleniyor", connected: "Bağlı" },
   scene: {
@@ -32,6 +32,7 @@ const tr: Messages = {
     o3DataFile: "O3 / O4 veri dosyası", randomData: "Üretilen veriler", choose: "Seç",
     bearing: "Yön (°, -1 geçersiz)", intervalMS: "Veri aralığı (ms)", level: "Tepe seviyesi (dBμV)",
     quality: "Yön bulma kalitesi (0–100)", responseDelay: "Yanıt gecikmesi (ms)",
+    relay16Hint: "Platforma simülatörün IP adresi ve portuyla bir Yönlü Dar Bant modülü (tür 12) ekleyin. Modbus TCP, birim 1.",
     enableDevice: "Bu cihazı etkinleştir", enableModule: "{{name}} modülünü etkinleştir", enableFirst: "Önce bir modülü etkinleştirin",
     detectionDevice: "Tespit cihazı", deviceNumber: "Cihaz {{index}}", deleteDevice: "Cihazı sil", add: "Ekle",
     targetsAndPosition: "Hedefler ve konum", centerPoint: "Merkez konum", targets: "Özel hedefler",
@@ -40,6 +41,20 @@ const tr: Messages = {
     refreshInterval: "Hedef yenileme (s, 0 kapalı)", maxDirectionChange: "En büyük dönüş (°)", maxDistance: "Yarıçap (m)",
     serial: "Seri numarası", model: "Model", freq: "Frekans (MHz)", rssi: "RSSI (dBm)", type: "Protokol", auto: "Otomatik",
     droneLat: "Dron enlemi", droneLng: "Dron boylamı", pilotLat: "Pilot enlemi", pilotLng: "Pilot boylamı",
+  },
+  connection: {
+    title: "Bağlantı yöntemi",
+    clientDirection: "Simülatör → Platform",
+    serverDirection: "Platform → Simülatör",
+    udpDirection: "Platform gönderir → Simülatör yanıtlar",
+    clientHint: "Sunucu adresleri alanına platform IP’sini, Port alanına platformun TCP dinleme portunu girin. Önce platform hizmetini başlatın; simülatör başlatıldığında otomatik bağlanır.",
+    serverHint: "Simülatör TCP sunucusu olarak dinler. Platformda bu makinenin erişilebilir IP’sini ve aşağıdaki dinleme portunu girin, ardından bağlantı için simülatörü başlatın.",
+    udpHint: "Simülatör UDP komutlarını dinler. Platformda bu makinenin erişilebilir IP’sini ve aşağıdaki dinleme portunu girin. Yanıtlar ve veriler komutu gönderen IP ve porta döner.",
+    platformEndpoint: "Platform sunucusu",
+    listenEndpoint: "Simülatörün dinlediği adres",
+    listenHint: "Dinleme adresi yereldir: 0.0.0.0 tüm ağ arabirimlerini dinler; 127.0.0.1 yalnızca yerel erişime izin verir. Başka bir makine için 0.0.0.0 veya yerel ağ IP’sinde dinleyin ve platformda bu ağ IP’sini girin.",
+    localIPs: "Bu makinenin ağ IP’leri: {{ips}}",
+    precisionHint: "İki TCP bağlantısı gerekir: önce komut, ardından aynı platform IP’sinden veri bağlantısı. Her iki port da erişilebilir olmalıdır.",
   },
   joint: {
     title: "Ortak yön bulma testi", target: "Simüle edilen hedef",
@@ -58,8 +73,8 @@ const tr: Messages = {
   },
   runtime: {
     title: "Canlı durum", connections: "Bağlantılar", heartbeats: "Kalp atışları", commandLink: "Komut", dataLink: "Veri",
-    wideband: "Geniş bant kaynakları", narrowband: "Dar bant yükselteçleri",
-    ptz: "PTZ", lastCommand: "Son komut", clients: "İstemciler", task: "Görev {{id}}",
+    wideband: "Geniş bant kaynakları", narrowband: "Dar bant yükselteçleri", outputs: "Etkin çıkışlar", face: "Yüz {{number}}",
+    outputOn: "Açık", outputOff: "Kapalı", reservedOutput: "IO16 (ayrılmış)", ptz: "PTZ", lastCommand: "Son komut", clients: "İstemciler", task: "Görev {{id}}",
   },
   log: { title: "Günlükler", filter: "Günlükleri filtrele", follow: "Takip et", export: "Günlükleri dışa aktar", clear: "Günlükleri temizle", empty: "Günlük yok", noMatch: "Eşleşen günlük yok" },
   map: {

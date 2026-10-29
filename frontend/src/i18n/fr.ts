@@ -10,7 +10,7 @@ const fr: Messages = {
   },
   devices: {
     detection: "Détection", analysis: "Analyse", precision_df: "Radiogoniométrie de précision",
-    directed_strike: "Intervention directionnelle", fpv: "FPV", jamming: "Brouillage",
+    directed_strike: "Intervention directionnelle", relay16: "Bande étroite directionnelle", fpv: "FPV", jamming: "Brouillage",
   },
   states: { disabled: "Désactivé", stopped: "Arrêté", waiting: "En attente de connexion", connected: "Connecté" },
   scene: {
@@ -32,6 +32,7 @@ const fr: Messages = {
     o3DataFile: "Fichier de données O3 / O4", randomData: "Données générées", choose: "Choisir",
     bearing: "Relèvement (°, -1 invalide)", intervalMS: "Intervalle des données (ms)", level: "Niveau de crête (dBμV)",
     quality: "Qualité de radiogoniométrie (0–100)", responseDelay: "Délai de réponse (ms)",
+    relay16Hint: "Ajoutez un module de bande étroite directionnelle (type 12) sur la plateforme avec l’IP et le port du simulateur. Modbus TCP, unité 1.",
     enableDevice: "Activer cet appareil", enableModule: "Activer {{name}}", enableFirst: "Activez d’abord un module",
     detectionDevice: "Appareil de détection", deviceNumber: "Appareil {{index}}", deleteDevice: "Supprimer l’appareil", add: "Ajouter",
     targetsAndPosition: "Cibles et position", centerPoint: "Position centrale", targets: "Cibles personnalisées",
@@ -40,6 +41,20 @@ const fr: Messages = {
     refreshInterval: "Actualisation des cibles (s, 0 désactivée)", maxDirectionChange: "Virage maximal (°)", maxDistance: "Rayon (m)",
     serial: "Numéro de série", model: "Modèle", freq: "Fréquence (MHz)", rssi: "RSSI (dBm)", type: "Protocole", auto: "Automatique",
     droneLat: "Latitude du drone", droneLng: "Longitude du drone", pilotLat: "Latitude du pilote", pilotLng: "Longitude du pilote",
+  },
+  connection: {
+    title: "Comment se connecter",
+    clientDirection: "Simulateur → Plateforme",
+    serverDirection: "Plateforme → Simulateur",
+    udpDirection: "La plateforme envoie → Le simulateur répond",
+    clientHint: "Saisissez l’IP de la plateforme dans Adresses des serveurs et son port d’écoute TCP dans Port. Démarrez d’abord le service de la plateforme ; le simulateur s’y connecte automatiquement au démarrage.",
+    serverHint: "Le simulateur écoute en tant que serveur TCP. Sur la plateforme, saisissez l’IP accessible de cette machine et le port d’écoute ci-dessous, puis démarrez le simulateur pour permettre la connexion.",
+    udpHint: "Le simulateur écoute les commandes UDP. Sur la plateforme, saisissez l’IP accessible de cette machine et le port d’écoute ci-dessous. Les réponses et les données reviennent à l’IP et au port ayant envoyé la commande.",
+    platformEndpoint: "Serveur de la plateforme",
+    listenEndpoint: "Écoute du simulateur",
+    listenHint: "L’adresse d’écoute est locale : 0.0.0.0 écoute sur toutes les interfaces ; 127.0.0.1 limite l’accès à cette machine. Pour une autre machine, écoutez sur 0.0.0.0 ou une IP réseau locale et saisissez cette IP sur la plateforme.",
+    localIPs: "IP réseau de cette machine : {{ips}}",
+    precisionHint: "Deux connexions TCP sont nécessaires : d’abord la commande, puis les données depuis la même IP de plateforme. Les deux ports doivent être accessibles.",
   },
   joint: {
     title: "Test de radiogoniométrie conjointe", target: "Cible simulée",
@@ -58,8 +73,8 @@ const fr: Messages = {
   },
   runtime: {
     title: "État en direct", connections: "Connexions", heartbeats: "Signaux de vie", commandLink: "Commande", dataLink: "Données",
-    wideband: "Sources large bande", narrowband: "Amplificateurs à bande étroite",
-    ptz: "PTZ", lastCommand: "Dernière commande", clients: "Clients", task: "Tâche {{id}}",
+    wideband: "Sources large bande", narrowband: "Amplificateurs à bande étroite", outputs: "Sorties actives", face: "Face {{number}}",
+    outputOn: "Activée", outputOff: "Désactivée", reservedOutput: "IO16 (réservée)", ptz: "PTZ", lastCommand: "Dernière commande", clients: "Clients", task: "Tâche {{id}}",
   },
   log: { title: "Journaux", filter: "Filtrer les journaux", follow: "Suivre", export: "Exporter les journaux", clear: "Effacer les journaux", empty: "Aucun journal", noMatch: "Aucun journal correspondant" },
   map: {

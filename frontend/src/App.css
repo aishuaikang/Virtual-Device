@@ -365,6 +365,50 @@
 .target-config {
   padding: 14px;
 }
+.connection-guide {
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.connection-guide-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 6px;
+}
+.connection-role {
+  padding: 1px 7px;
+  border: 1px solid var(--control-line);
+  border-radius: 4px;
+  background: var(--surface);
+  font-weight: 600;
+}
+.connection-endpoints {
+  margin: 8px 0;
+}
+.connection-endpoints > div,
+.connection-endpoints dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.connection-endpoints dt,
+.connection-note {
+  color: var(--muted);
+}
+.connection-endpoints dd {
+  min-width: 0;
+  margin: 0;
+}
+.connection-endpoints code {
+  font-family: var(--mono);
+}
 .module-toggle {
   display: flex;
   align-items: center;
@@ -880,6 +924,52 @@
   display: flex;
   align-items: center;
   gap: 5px;
+}
+.relay16-hint,
+.relay16-summary {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.relay16-hint {
+  margin-top: 14px;
+}
+.relay16-board {
+  display: grid;
+  gap: 10px;
+}
+.relay16-face {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.relay16-face h3 {
+  margin: 0;
+}
+.relay16-outputs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 12px;
+}
+.relay16-coil {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+}
+.relay16-coil small {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 10px;
+}
+.relay16-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
 }
 .inline-error {
   color: var(--danger);

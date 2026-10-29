@@ -68,6 +68,24 @@ export namespace config {
 	        this.quality = source["quality"];
 	    }
 	}
+	export class Relay16Config {
+	    enabled: boolean;
+	    host: string;
+	    port: number;
+	    response_delay_ms: number;
+
+	    static createFrom(source: any = {}) {
+	        return new Relay16Config(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.host = source["host"];
+	        this.port = source["port"];
+	        this.response_delay_ms = source["response_delay_ms"];
+	    }
+	}
 	export class DirectedStrikeConfig {
 	    enabled: boolean;
 	    host: string;
@@ -263,6 +281,7 @@ export namespace config {
 	    fpv: BaseConfig;
 	    jamming: BaseConfig;
 	    directed_strike: DirectedStrikeConfig;
+	    relay16: Relay16Config;
 	    precision_df: PrecisionDFConfig;
 	
 	    static createFrom(source: any = {}) {
@@ -285,6 +304,7 @@ export namespace config {
 	        this.fpv = this.convertValues(source["fpv"], BaseConfig);
 	        this.jamming = this.convertValues(source["jamming"], BaseConfig);
 	        this.directed_strike = this.convertValues(source["directed_strike"], DirectedStrikeConfig);
+	        this.relay16 = this.convertValues(source["relay16"], Relay16Config);
 	        this.precision_df = this.convertValues(source["precision_df"], PrecisionDFConfig);
 	    }
 	
@@ -313,6 +333,7 @@ export namespace config {
 	
 	
 	
+
 
 }
 
@@ -345,6 +366,7 @@ export namespace engine {
 	    modules: ModuleStatus[];
 	    droneCount: number;
 	    directedStrike?: modules.DirectedStrikeSnapshot;
+	    relay16?: modules.Relay16Snapshot;
 	    precisionDF?: modules.PrecisionDFSnapshot;
 	
 	    static createFrom(source: any = {}) {
@@ -357,6 +379,7 @@ export namespace engine {
 	        this.modules = this.convertValues(source["modules"], ModuleStatus);
 	        this.droneCount = source["droneCount"];
 	        this.directedStrike = this.convertValues(source["directedStrike"], modules.DirectedStrikeSnapshot);
+	        this.relay16 = this.convertValues(source["relay16"], modules.Relay16Snapshot);
 	        this.precisionDF = this.convertValues(source["precisionDF"], modules.PrecisionDFSnapshot);
 	    }
 	
@@ -570,6 +593,38 @@ export namespace modules {
 	        this.receivedCommands = source["receivedCommands"];
 	        this.sentFrames = source["sentFrames"];
 	        this.iqBytes = source["iqBytes"];
+	        this.lastCommand = source["lastCommand"];
+	        this.lastActivityAt = source["lastActivityAt"];
+	        this.lastError = source["lastError"];
+	    }
+	}
+	export class Relay16Snapshot {
+	    listening: boolean;
+	    connected: boolean;
+	    listenAddress: string;
+	    activeConnections: number;
+	    clientAddresses: string[];
+	    receivedFrames: number;
+	    sentFrames: number;
+	    outputMask: number;
+	    lastCommand?: string;
+	    lastActivityAt?: string;
+	    lastError?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Relay16Snapshot(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.listening = source["listening"];
+	        this.connected = source["connected"];
+	        this.listenAddress = source["listenAddress"];
+	        this.activeConnections = source["activeConnections"];
+	        this.clientAddresses = source["clientAddresses"];
+	        this.receivedFrames = source["receivedFrames"];
+	        this.sentFrames = source["sentFrames"];
+	        this.outputMask = source["outputMask"];
 	        this.lastCommand = source["lastCommand"];
 	        this.lastActivityAt = source["lastActivityAt"];
 	        this.lastError = source["lastError"];

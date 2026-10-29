@@ -36,6 +36,7 @@ const DEVICE_ICONS = {
   analysis: "analysis",
   precision_df: "compass",
   directed_strike: "crosshair",
+  relay16: "crosshair",
   fpv: "video",
   jamming: "wave",
 } as const;

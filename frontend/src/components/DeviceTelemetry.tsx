@@ -18,6 +18,11 @@ export default function DeviceTelemetry({
   const receiver = device === "precision_df" ? status.precisionDF : undefined;
   const directed =
     device === "directed_strike" ? status.directedStrike : undefined;
+  const relay = device === "relay16" ? status.relay16 : undefined;
+  const activeOutputs = relay
+    ? Array.from({ length: 15 }, (_, bit) => (relay.outputMask >> bit) & 1)
+        .reduce((sum, value) => sum + value, 0)
+    : 0;
   const metrics = receiver
     ? [
         ["RX", receiver.receivedCommands],
@@ -30,9 +35,17 @@ export default function DeviceTelemetry({
           ["TX", directed.sentFrames],
           [t("runtime.heartbeats"), directed.heartbeatCount],
         ]
-      : [[t("runtime.connections"), module?.connectionCount ?? 0]];
-  const lastCommand = receiver?.lastCommand ?? directed?.lastCommand;
-  const lastError = receiver?.lastError ?? directed?.lastError;
+      : relay
+        ? [
+            ["RX", relay.receivedFrames],
+            ["TX", relay.sentFrames],
+            [t("runtime.outputs"), `${activeOutputs}/15`],
+          ]
+        : [[t("runtime.connections"), module?.connectionCount ?? 0]];
+  const lastCommand =
+    receiver?.lastCommand ?? directed?.lastCommand ?? relay?.lastCommand;
+  const lastError =
+    receiver?.lastError ?? directed?.lastError ?? relay?.lastError;
   const clients = module?.clientAddresses ?? [];
 
   return (
@@ -123,6 +136,50 @@ export default function DeviceTelemetry({
             </div>
           </div>
         </>
+      )}
+      {relay && (
+        <div className="relay16-board">
+          {Array.from({ length: 5 }, (_, face) => (
+            <div className="relay16-face" key={face}>
+              <h3>{t("runtime.face", { number: face + 1 })}</h3>
+              <div className="relay16-outputs">
+                {["433/800/900 MHz", "1.2/1.5 GHz", "2.4/5.2/5.8 GHz"].map(
+                  (band, group) => {
+                    const channel = face * 3 + group + 1;
+                    const enabled = (relay.outputMask & (1 << (channel - 1))) !== 0;
+                    const state = t(
+                      enabled ? "runtime.outputOn" : "runtime.outputOff",
+                    );
+                    return (
+                      <span
+                        className="relay16-coil"
+                        key={channel}
+                        aria-label={`IO${channel}: ${state}`}
+                      >
+                        <code>IO{channel}</code>
+                        <i
+                          className={`state-dot state-${enabled ? "connected" : "disabled"}`}
+                        />
+                        <span>{state}</span>
+                        <small>{band}</small>
+                      </span>
+                    );
+                  },
+                )}
+              </div>
+            </div>
+          ))}
+          <div className="relay16-summary">
+            <span>
+              {t("runtime.reservedOutput")} · {t(
+                relay.outputMask & 0x8000 ? "runtime.outputOn" : "runtime.outputOff",
+              )}
+            </span>
+            <code>
+              0x{relay.outputMask.toString(16).toUpperCase().padStart(4, "0")}
+            </code>
+          </div>
+        </div>
       )}
       {lastCommand && (
         <div className="last-command">

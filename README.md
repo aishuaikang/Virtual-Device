@@ -4,6 +4,8 @@
 
 多面普通侦测模块的跳频、实时 RSSI、可拖拽雷达图与缺面测试见 [联合测向模拟说明](docs/joint-direction.md)。
 
+类型 12 的五面定向窄带继电器设备见 [定向窄带模拟说明](docs/relay16.md)。
+
 ## About
 
 This is the official Wails React-TS template.

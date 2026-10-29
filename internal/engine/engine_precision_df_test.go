@@ -13,6 +13,7 @@ import (
 func precisionDFEngineConfig() *config.Config {
 	cfg := config.DefaultConfig()
 	cfg.Analysis.Enabled, cfg.FPV.Enabled, cfg.Jamming.Enabled, cfg.DirectedStrike.Enabled = false, false, false, false
+	cfg.Relay16.Enabled = false
 	for i := range cfg.Detections {
 		cfg.Detections[i].Enabled = false
 	}

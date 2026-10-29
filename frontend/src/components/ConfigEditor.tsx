@@ -40,6 +40,15 @@ export default function ConfigEditor({
   const items = detections(cfg);
   const index = Math.min(detectionIndex, items.length - 1);
   const detection = items[index];
+  const connectionConfig = device === "detection" ? detection : cfg[device];
+  const isTCPClient = "hosts" in connectionConfig;
+  const connectionType = isTCPClient
+    ? "client"
+    : device === "detection" ? "udp" : "server";
+  const connectionRole = isTCPClient
+    ? "TCP Client"
+    : device === "detection" ? "UDP Server" : "TCP Server";
+  const interfaceIPs = localIPs.filter((ip) => !ip.startsWith("127.") && ip !== "::1");
 
   useEffect(() => {
     let cancelled = false;
@@ -105,6 +114,43 @@ export default function ConfigEditor({
 
   return (
     <div className="device-config">
+      <aside className="connection-guide" aria-label={t("connection.title")}>
+        <div className="connection-guide-heading">
+          <span className="connection-role">
+            {connectionRole}{device === "relay16" && " · Modbus TCP"}
+          </span>
+          <strong>{t(`connection.${connectionType}Direction`)}</strong>
+        </div>
+        <p>{t(`connection.${connectionType}Hint`)}</p>
+        <dl className="connection-endpoints">
+          <div>
+            <dt>{t(isTCPClient ? "connection.platformEndpoint" : "connection.listenEndpoint")}</dt>
+            <dd>
+              {"hosts" in connectionConfig ? (
+                (connectionConfig.hosts ?? []).map((host, i) => (
+                  <code key={i}>{host}:{connectionConfig.port}</code>
+                ))
+              ) : "command_port" in connectionConfig ? (
+                <>
+                  <span>{t("config.commandPort")} <code>{connectionConfig.host}:{connectionConfig.command_port}</code></span>
+                  <span>{t("config.dataPort")} <code>{connectionConfig.host}:{connectionConfig.data_port}</code></span>
+                </>
+              ) : (
+                <code>{connectionConfig.host}:{connectionConfig.port}</code>
+              )}
+            </dd>
+          </div>
+        </dl>
+        {!isTCPClient && (
+          <p className="connection-note">{t("connection.listenHint")}</p>
+        )}
+        {!("hosts" in connectionConfig) && connectionConfig.host === "0.0.0.0" && interfaceIPs.length > 0 && (
+          <p className="connection-note">{t("connection.localIPs", { ips: interfaceIPs.join(", ") })}</p>
+        )}
+        {device === "precision_df" && (
+          <p className="connection-note">{t("connection.precisionHint")}</p>
+        )}
+      </aside>
       {device === "detection" && (
         <>
           <JointDirectionEditor
@@ -347,20 +393,20 @@ export default function ConfigEditor({
         </>
       )}
 
-      {device === "directed_strike" && (
+      {(device === "directed_strike" || device === "relay16") && (
         <>
           <div className="form-grid">
             <TextField
               label={t("config.listenHost")}
-              value={cfg.directed_strike.host}
-              onChange={(host) => patch("directed_strike", { host })}
+              value={cfg[device].host}
+              onChange={(host) => patch(device, { host })}
               options={addressOptions}
               disabled={disabled}
             />
             <NumberField
               label={t("config.port")}
-              value={cfg.directed_strike.port}
-              onChange={(port) => patch("directed_strike", { port })}
+              value={cfg[device].port}
+              onChange={(port) => patch(device, { port })}
               min={1}
               max={65535}
               disabled={disabled}
@@ -369,15 +415,18 @@ export default function ConfigEditor({
           <Advanced>
             <NumberField
               label={t("config.responseDelay")}
-              value={cfg.directed_strike.response_delay_ms}
+              value={cfg[device].response_delay_ms}
               onChange={(response_delay_ms) =>
-                patch("directed_strike", { response_delay_ms })
+                patch(device, { response_delay_ms })
               }
               min={0}
               max={10000}
               disabled={disabled}
             />
           </Advanced>
+          {device === "relay16" && (
+            <p className="relay16-hint">{t("config.relay16Hint")}</p>
+          )}
         </>
       )}
 
