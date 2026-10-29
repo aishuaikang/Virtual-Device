@@ -86,6 +86,90 @@ export namespace config {
 	        this.response_delay_ms = source["response_delay_ms"];
 	    }
 	}
+	export class JointDirectionSample {
+	    deviceID: number;
+	    reporting: boolean;
+	    rssi: number;
+
+	    static createFrom(source: any = {}) {
+	        return new JointDirectionSample(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.deviceID = source["deviceID"];
+	        this.reporting = source["reporting"];
+	        this.rssi = source["rssi"];
+	    }
+	}
+	export class JointDirectionTarget {
+	    model: string;
+	    frequencies: number[];
+	    faces: JointDirectionSample[];
+
+	    static createFrom(source: any = {}) {
+	        return new JointDirectionTarget(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.model = source["model"];
+	        this.frequencies = source["frequencies"];
+	        this.faces = this.convertValues(source["faces"], JointDirectionSample);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class JointDirectionConfig {
+	    enabled: boolean;
+	    hop_interval_ms: number;
+	    targets: JointDirectionTarget[];
+
+	    static createFrom(source: any = {}) {
+	        return new JointDirectionConfig(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.hop_interval_ms = source["hop_interval_ms"];
+	        this.targets = this.convertValues(source["targets"], JointDirectionTarget);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class DetectionConfig {
 	    enabled: boolean;
 	    deviceID: number;
@@ -175,6 +259,7 @@ export namespace config {
 	    analysis: AnalysisConfig;
 	    detection: DetectionConfig;
 	    detections: DetectionConfig[];
+	    joint_direction: JointDirectionConfig;
 	    fpv: BaseConfig;
 	    jamming: BaseConfig;
 	    directed_strike: DirectedStrikeConfig;
@@ -196,6 +281,7 @@ export namespace config {
 	        this.analysis = this.convertValues(source["analysis"], AnalysisConfig);
 	        this.detection = this.convertValues(source["detection"], DetectionConfig);
 	        this.detections = this.convertValues(source["detections"], DetectionConfig);
+	        this.joint_direction = this.convertValues(source["joint_direction"], JointDirectionConfig);
 	        this.fpv = this.convertValues(source["fpv"], BaseConfig);
 	        this.jamming = this.convertValues(source["jamming"], BaseConfig);
 	        this.directed_strike = this.convertValues(source["directed_strike"], DirectedStrikeConfig);
@@ -220,6 +306,9 @@ export namespace config {
 		    return a;
 		}
 	}
+
+
+
 	
 	
 	

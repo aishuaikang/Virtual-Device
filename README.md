@@ -2,6 +2,8 @@
 
 精准测向设备的启用、连接和模拟范围见 [精准测向模拟说明](docs/precision-direction-finding.md)。
 
+多面普通侦测模块的跳频、实时 RSSI、可拖拽雷达图与缺面测试见 [联合测向模拟说明](docs/joint-direction.md)。
+
 ## About
 
 This is the official Wails React-TS template.

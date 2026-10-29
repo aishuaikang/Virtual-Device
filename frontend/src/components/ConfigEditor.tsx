@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { config } from "../../wailsjs/go/models";
 import { GetLocalIPs, SelectFile } from "../../wailsjs/go/main/App";
 import { detections, type DeviceId } from "../devices";
+import { syncJointFaces } from "../jointDirection";
 import {
   Advanced,
   Field,
@@ -12,6 +13,7 @@ import {
   Toggle,
 } from "./ConfigFields";
 import Icon from "./Icon";
+import JointDirectionEditor from "./JointDirectionEditor";
 
 interface Props {
   cfg: config.Config;
@@ -19,6 +21,7 @@ interface Props {
   onChange: (cfg: config.Config) => void;
   onError: (error: unknown) => void;
   disabled: boolean;
+  liveJointDirection: boolean;
 }
 
 export default function ConfigEditor({
@@ -27,6 +30,7 @@ export default function ConfigEditor({
   onChange,
   onError,
   disabled,
+  liveJointDirection,
 }: Props) {
   const { t } = useTranslation();
   const [localIPs, setLocalIPs] = useState<string[]>([]);
@@ -56,7 +60,12 @@ export default function ConfigEditor({
   };
   const setDetections = (next: config.DetectionConfig[]) => {
     onChange(
-      new config.Config({ ...cfg, detections: next, detection: next[0] }),
+      new config.Config({
+        ...cfg,
+        detections: next,
+        detection: next[0],
+        joint_direction: syncJointFaces(cfg.joint_direction, items, next),
+      }),
     );
   };
   const patchDetection = (value: Partial<config.DetectionConfig>) => {
@@ -102,6 +111,15 @@ export default function ConfigEditor({
       </datalist>
       {device === "detection" && (
         <>
+          <JointDirectionEditor
+            settings={cfg.joint_direction}
+            items={items}
+            disabled={disabled}
+            live={liveJointDirection}
+            onChange={(joint_direction) =>
+              onChange(new config.Config({ ...cfg, joint_direction }))
+            }
+          />
           <div className="device-toolbar">
             <select
               aria-label={t("config.detectionDevice")}
@@ -168,10 +186,14 @@ export default function ConfigEditor({
             />
             <NumberField
               label={t("config.droneCount")}
-              value={detection.drone_count}
+              value={
+                cfg.joint_direction.enabled
+                  ? (cfg.joint_direction.targets?.length ?? 0)
+                  : detection.drone_count
+              }
               onChange={(drone_count) => patchDetection({ drone_count })}
               min={0}
-              disabled={disabled}
+              disabled={disabled || cfg.joint_direction.enabled}
             />
           </div>
           <Advanced>
@@ -207,7 +229,7 @@ export default function ConfigEditor({
             <TextField
               label={t("config.analysisDeviceIDs")}
               value={cfg.analysis.deviceID}
-              placeholder="2222,3333"
+              placeholder="3000,3001"
               onChange={(deviceID) => patch("analysis", { deviceID })}
               disabled={disabled}
             />

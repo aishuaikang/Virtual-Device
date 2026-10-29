@@ -204,6 +204,7 @@ type Config struct {
 	Analysis                   AnalysisConfig       `json:"analysis"`                       // 解析模块配置
 	Detection                  DetectionConfig      `json:"detection"`                      // 侦测模块配置
 	Detections                 []DetectionConfig    `json:"detections"`                     // 多侦测模块配置
+	JointDirection             JointDirectionConfig `json:"joint_direction"`                // 联合测向共享侦测目标
 	FPV                        BaseConfig           `json:"fpv"`                            // FPV模块配置
 	Jamming                    BaseConfig           `json:"jamming"`                        // 干扰模块配置
 	DirectedStrike             DirectedStrikeConfig `json:"directed_strike"`                // 定向打击设备模拟器配置
@@ -257,7 +258,7 @@ func normalizeDetectionConfig(cfg *DetectionConfig) {
 	cfg.Host = strings.TrimSpace(cfg.Host)
 }
 
-// NormalizeConfig trims user-provided values into a stable in-memory form.
+// NormalizeConfig normalizes user-provided values into a stable in-memory form.
 func NormalizeConfig(cfg *Config) {
 	if cfg == nil {
 		return
@@ -285,6 +286,7 @@ func NormalizeConfig(cfg *Config) {
 		cfg.PredefinedDrones[i].Model = strings.TrimSpace(cfg.PredefinedDrones[i].Model)
 		cfg.PredefinedDrones[i].Type = normalizeDroneType(cfg.PredefinedDrones[i].Type)
 	}
+	normalizeJointDirection(cfg)
 }
 
 // ValidateConfig validates a config after first normalizing optional values.
@@ -306,6 +308,7 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		Analysis                   json.RawMessage       `json:"analysis"`
 		Detection                  json.RawMessage       `json:"detection"`
 		Detections                 []json.RawMessage     `json:"detections"`
+		JointDirection             json.RawMessage       `json:"joint_direction"`
 		FPV                        BaseConfig            `json:"fpv"`
 		Jamming                    BaseConfig            `json:"jamming"`
 		DirectedStrike             *DirectedStrikeConfig `json:"directed_strike"`
@@ -330,6 +333,12 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	c.CenterPoint = raw.CenterPoint
 	c.FPV = raw.FPV
 	c.Jamming = raw.Jamming
+	c.JointDirection = JointDirectionConfig{HopIntervalMS: 1500}
+	if len(raw.JointDirection) > 0 {
+		if err := json.Unmarshal(raw.JointDirection, &c.JointDirection); err != nil {
+			return err
+		}
+	}
 	if raw.DirectedStrike != nil {
 		c.DirectedStrike = *raw.DirectedStrike
 	} else {
@@ -474,7 +483,7 @@ func DefaultConfig() *Config {
 		MaxPushSpeed: 1000,
 		Analysis: AnalysisConfig{
 			Enabled:                true,
-			DeviceID:               "2001",
+			DeviceID:               "3000",
 			DroneCount:             3,
 			Hosts:                  []string{"127.0.0.1"},
 			Port:                   10002,
@@ -528,6 +537,7 @@ func DefaultConfig() *Config {
 		},
 		DirectedStrike: defaultDirectedStrikeConfig(true),
 		PrecisionDF:    defaultPrecisionDFConfig(),
+		JointDirection: JointDirectionConfig{HopIntervalMS: 1500},
 	}
 	NormalizeConfig(cfg)
 	return cfg
@@ -689,6 +699,10 @@ func validateConfig(config *Config) error {
 			return fmt.Errorf("detection[%d]与detection[%d]监听地址重复: %s", i, first, addr)
 		}
 		seenDetectionAddrs[addr] = i
+	}
+
+	if err := validateJointDirection(config); err != nil {
+		return err
 	}
 
 	// 验证FPV配置

@@ -439,12 +439,21 @@ func (f *detectionUDPServer) handleCommand(ctx context.Context, session *clientS
 					float64(userDefinedFrequency),
 				))
 			}
-			if _, err := conn.WriteToUDP([]byte(data.String()), addr); err != nil {
-				log.Printf("[%s-%d-%s] 发送侦测数据失败: %v", f.title, f.deviceId, addrStr, err)
+			if data == nil {
 				continue
 			}
-			log.Printf("[%s-%d-%s] 发送侦测数据: %s", f.title, f.deviceId, addrStr, data.String())
-			f.touchSession(session)
+			// The receiver parses one target per datagram, including in a shared scan round.
+			for _, payload := range strings.SplitAfter(data.String(), "\n") {
+				if strings.TrimSpace(payload) == "" {
+					continue
+				}
+				if _, err := conn.WriteToUDP([]byte(payload), addr); err != nil {
+					log.Printf("[%s-%d-%s] 发送侦测数据失败: %v", f.title, f.deviceId, addrStr, err)
+					continue
+				}
+				log.Printf("[%s-%d-%s] 发送侦测数据: %s", f.title, f.deviceId, addrStr, payload)
+				f.touchSession(session)
+			}
 		}
 	}
 }

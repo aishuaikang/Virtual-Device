@@ -49,6 +49,7 @@ type Engine struct {
 
 	analysisMock   mocks.MockDataGenerator
 	detectionMocks []mocks.MockDataGenerator
+	jointDirection *mocks.JointDirectionState
 }
 
 func New() *Engine {
@@ -74,6 +75,10 @@ func (e *Engine) Start(cfg *config.Config) error {
 	e.jamming = nil
 	e.directedStrike = nil
 	e.precisionDF = nil
+	e.jointDirection = nil
+	if cfg.JointDirection.Enabled {
+		e.jointDirection = mocks.NewJointDirectionState(cfg.JointDirection)
+	}
 
 	if cfg.Analysis.Enabled {
 		deviceIDs, err := cfg.Analysis.DeviceIDs()
@@ -86,6 +91,7 @@ func (e *Engine) Start(cfg *config.Config) error {
 	} else {
 		log.Printf("[Engine] 解析模块未启用")
 	}
+	startedAt := time.Now()
 	for i := range cfg.Detections {
 		detectionCfg := cfg.Detections[i]
 		if !detectionCfg.Enabled {
@@ -94,6 +100,9 @@ func (e *Engine) Start(cfg *config.Config) error {
 		}
 		log.Printf("[Engine] 创建侦测模块[%d]，设备ID=%d host=%s port=%d", i, detectionCfg.DeviceID, detectionCfg.Host, detectionCfg.Port)
 		detectionMock := mocks.NewMockDataGenerator(detectionCfg.DroneCount)
+		if cfg.JointDirection.Enabled {
+			detectionMock = mocks.NewJointDirectionGenerator(detectionMock, e.jointDirection, i, startedAt)
+		}
 		e.detectionMocks = append(e.detectionMocks, detectionMock)
 		e.detections = append(e.detections, modules.NewDetectionUDPModule(detectionCfg, detectionMock))
 	}
@@ -194,6 +203,26 @@ func (e *Engine) Start(cfg *config.Config) error {
 	}
 
 	log.Printf("[Engine] 所有模块已启动")
+	return nil
+}
+
+// UpdateJointDirection updates scan samples while preserving sockets, hops and sequences.
+func (e *Engine) UpdateJointDirection(settings config.JointDirectionConfig) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if !e.running {
+		return nil
+	}
+	if e.jointDirection == nil {
+		if settings.Enabled {
+			return fmt.Errorf("请先停止模拟器再开启联合测向测试")
+		}
+		return nil
+	}
+	if err := config.ValidateJointDirectionUpdate(*e.jointDirection.Snapshot(), settings); err != nil {
+		return err
+	}
+	e.jointDirection.Update(settings)
 	return nil
 }
 

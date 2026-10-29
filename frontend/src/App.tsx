@@ -44,6 +44,7 @@ export default function App() {
   } | null>(null);
   const cfgRef = useRef<config.Config | null>(null);
   const syncRef = useRef<Promise<void>>(Promise.resolve());
+  const syncRevision = useRef(0);
   const requestRef = useRef(0);
   const actionRef = useRef(false);
   const running = status?.running ?? false;
@@ -57,9 +58,13 @@ export default function App() {
     const next = new config.Config(value);
     cfgRef.current = next;
     setCfg(next);
+    const revision = ++syncRevision.current;
     syncRef.current = syncRef.current
       .catch(() => undefined)
-      .then(() => SyncCurrentConfig(next));
+      .then(() => {
+        if (running && revision !== syncRevision.current) return;
+        return SyncCurrentConfig(next);
+      });
     void syncRef.current.catch(showError);
   };
 
@@ -299,7 +304,13 @@ export default function App() {
               </span>
             )}
             {locked && (
-              <span className="read-only">{t("config.readOnly")}</span>
+              <span className="read-only">
+                {t(
+                  page === "detection" && cfg.joint_direction.enabled && running
+                    ? "joint.runtimeEditable"
+                    : "config.readOnly",
+                )}
+              </span>
             )}
           </div>
           <div className="workspace-scroll" key={page}>
@@ -317,6 +328,7 @@ export default function App() {
                   onChange={applyConfig}
                   onError={showError}
                   disabled={locked}
+                  liveJointDirection={running && action === null}
                 />
                 {deviceEnabled(cfg, page) && (
                   <DeviceTelemetry device={page} status={status} />

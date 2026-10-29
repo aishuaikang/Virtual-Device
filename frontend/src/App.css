@@ -468,6 +468,248 @@ input::-webkit-outer-spin-button {
   gap: 10px;
   margin-bottom: 22px;
 }
+.joint-direction {
+  container: joint-config / inline-size;
+  padding-bottom: 18px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.joint-direction > .section-heading {
+  margin-bottom: 0;
+}
+.joint-hint {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+  margin-top: 10px;
+}
+.joint-target-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0;
+}
+.joint-target-toolbar > select {
+  flex: 1;
+}
+.joint-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 15px 0 12px;
+}
+.joint-presets > .button {
+  font-size: 11px;
+  height: 28px;
+  padding: 0 9px;
+}
+.joint-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+.joint-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.joint-table th,
+.joint-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.joint-table th {
+  background: var(--canvas);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+.joint-table tr:last-child td {
+  border-bottom: 0;
+}
+.joint-table td:nth-child(4) {
+  width: 115px;
+  min-width: 90px;
+}
+.joint-table input[type="number"] {
+  height: 29px;
+}
+.joint-table td:last-child,
+.joint-table th:last-child {
+  text-align: center;
+}
+.joint-table tr.is-disabled {
+  color: var(--faint);
+  background: var(--canvas);
+}
+.joint-result {
+  font-variant-numeric: tabular-nums;
+}
+.joint-samples {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.9fr) minmax(0, 1.5fr);
+  align-items: start;
+  gap: 16px;
+  margin-top: 20px;
+}
+.joint-sample-controls {
+  min-width: 0;
+}
+.joint-sample-controls .joint-presets {
+  margin-top: 0;
+}
+.joint-live {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+  font-size: 11px;
+  margin-bottom: 10px;
+}
+.joint-live::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.joint-radar {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--canvas);
+}
+.joint-radar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+.joint-radar-heading strong {
+  font-weight: 600;
+}
+.joint-link-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.joint-link-toggle input {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.joint-radar-chart {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto;
+  overflow: visible;
+  touch-action: none;
+  user-select: none;
+}
+.joint-radar-grid polygon,
+.joint-radar-grid circle {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.joint-radar-grid text {
+  fill: var(--faint);
+  font-size: 9px;
+  font-family: var(--mono);
+}
+.joint-radar-axis line {
+  stroke: var(--line);
+  stroke-dasharray: 3 3;
+}
+.joint-radar-axis text {
+  fill: var(--text);
+  font-size: 11px;
+  font-family: var(--mono);
+}
+.joint-radar-axis tspan {
+  fill: var(--muted);
+  font-size: 9px;
+}
+.joint-radar-axis.is-missing text {
+  fill: var(--faint);
+  text-decoration: line-through;
+}
+.joint-radar-signal {
+  fill: var(--accent);
+  fill-opacity: 0.12;
+  stroke: var(--accent);
+  stroke-width: 1.7;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.joint-radar-signal-line {
+  stroke: var(--accent);
+  stroke-width: 1.7;
+}
+.joint-radar-handle {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 2;
+  cursor: grab;
+  outline: none;
+}
+.joint-radar-handle:hover,
+.joint-radar-handle:focus-visible,
+.joint-radar-handle.is-active {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 3;
+  filter: drop-shadow(0 0 2px var(--accent));
+}
+.joint-radar-handle[aria-disabled="true"] {
+  cursor: default;
+}
+.joint-radar-handle:active {
+  cursor: grabbing;
+}
+.joint-radar-center {
+  fill: var(--muted);
+  pointer-events: none;
+}
+.joint-radar-readout {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 9px;
+  min-height: 20px;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.joint-radar-readout strong {
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+}
+.joint-radar-readout small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+@container joint-config (max-width: 600px) {
+  .joint-samples {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .joint-radar {
+    max-width: 340px;
+    width: 100%;
+    justify-self: center;
+  }
+}
 .device-toolbar > select {
   width: auto;
   min-width: 160px;
