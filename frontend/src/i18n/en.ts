@@ -47,6 +47,7 @@ export default {
     saved: "Scene saved",
   },
   config: {
+    deviceConfig: "Device configuration",
     readOnly: "Read only while running",
     advanced: "More settings",
     servers: "Server addresses",

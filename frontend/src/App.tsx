@@ -26,6 +26,15 @@ import SceneSelector from "./components/SceneSelector";
 import TargetEditor from "./components/TargetEditor";
 import "./App.css";
 
+const DEVICE_ICONS = {
+  detection: "radio",
+  analysis: "analysis",
+  precision_df: "compass",
+  directed_strike: "crosshair",
+  fpv: "video",
+  jamming: "wave",
+} as const;
+
 function errorText(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -175,62 +184,26 @@ export default function App() {
 
   return (
     <div className="simulator">
-      <header className="app-header">
+      <aside className="device-sidebar">
         <div className="app-brand">
-          <Icon name="radio" />
-          <strong>{t("app.title")}</strong>
-        </div>
-        <SceneSelector
-          currentCfg={cfg}
-          getCurrentConfig={currentConfig}
-          onLoad={applyConfig}
-          onToast={notify}
-          running={locked}
-        />
-        <div className="header-actions">
-          <span className={`engine-state${running ? " is-running" : ""}`}>
-            <i />
-            {t(`app.${action ?? (running ? "running" : "stopped")}`)}
+          <span className="app-brand-icon" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none">
+              <path
+                d="M16 3 28 10v12l-12 7L4 22V10L16 3Z"
+                stroke="currentColor"
+                strokeWidth="1.6"
+              />
+              <path
+                d="M10 12v7l6 3 6-3v-7M16 9v13M10 12l6 3 6-3"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
           </span>
-          <button
-            className="button button-quiet language-button"
-            onClick={() =>
-              void i18n.changeLanguage(i18n.language === "zh" ? "en" : "zh")
-            }
-            aria-label={t("app.language")}
-          >
-            {i18n.language === "zh" ? "EN" : "中文"}
-          </button>
-          <button
-            className={`button run-button${running ? " is-stop" : ""}`}
-            onClick={() => void run()}
-            disabled={action !== null || (!running && enabledCount === 0)}
-            title={enabledCount === 0 ? t("config.enableFirst") : undefined}
-          >
-            <Icon name={running ? "stop" : "play"} />
-            {t(`app.${action ?? (running ? "stop" : "start")}`)}
-          </button>
+          <span>UAV Defender<small>Simulator</small></span>
         </div>
-      </header>
-
-      {(error || connectionError) && (
-        <div className="error-banner" role="alert">
-          <span>{error || connectionError}</span>
-          <button
-            className="icon-button"
-            onClick={() => {
-              setError("");
-              setConnectionError("");
-            }}
-            aria-label={t("app.close")}
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-      )}
-
-      <div className="workbench">
-        <aside className="device-sidebar">
+        <div className="sidebar-navigation">
           <div className="sidebar-heading">
             <span>{t("app.modules")}</span>
             <span>
@@ -251,12 +224,16 @@ export default function App() {
                     onClick={() => setPage(id)}
                     aria-current={page === id ? "page" : undefined}
                     aria-label={t(`devices.${id}`)}
+                    title={t(`devices.${id}`)}
                   >
-                    <span className="device-label">
-                      <i className={`state-dot state-${state}`} />
-                      <strong>{t(`devices.${id}`)}</strong>
+                    <Icon className="device-icon" name={DEVICE_ICONS[id]} />
+                    <span className="device-copy">
+                      <span className="device-label">
+                        <strong>{t(`devices.${id}`)}</strong>
+                        <i className={`state-dot state-${state}`} />
+                      </span>
+                      <code title={endpoint}>{endpoint || "—"}</code>
                     </span>
-                    <code title={endpoint}>{endpoint || "—"}</code>
                   </button>
                   <Toggle
                     label={t("config.enableModule", {
@@ -276,20 +253,29 @@ export default function App() {
             className={`targets-nav${page === "targets" ? " is-selected" : ""}`}
             onClick={() => setPage("targets")}
             aria-current={page === "targets" ? "page" : undefined}
+            title={t("config.targetsAndPosition")}
           >
             <Icon name="map" />
             <span>{t("config.targetsAndPosition")}</span>
             <span className="count">{cfg.predefined_drones?.length || ""}</span>
           </button>
+        </div>
+        <div className="sidebar-footer">
+          <span className={`engine-state${running ? " is-running" : ""}`}>
+            <i />
+            {t(`app.${action ?? (running ? "running" : "stopped")}`)}
+          </span>
           {running && (
-            <div className="sidebar-footer">
+            <span>
               {t("app.connections", { count: connections })}
-            </div>
+            </span>
           )}
-        </aside>
+        </div>
+      </aside>
 
-        <main className="config-workspace">
-          <div className="workspace-heading">
+      <div className="simulator-main">
+        <header className="app-header">
+          <div className="page-title">
             <h1>
               {t(
                 page === "targets"
@@ -297,39 +283,118 @@ export default function App() {
                   : `devices.${page}`,
               )}
             </h1>
-            {selectedState && (
-              <span className={`device-state state-${selectedState}`}>
-                <i className={`state-dot state-${selectedState}`} />
-                {t(`states.${selectedState}`)}
-              </span>
-            )}
+          </div>
+          <button
+            className="button button-quiet language-button"
+            onClick={() =>
+              void i18n.changeLanguage(i18n.language === "zh" ? "en" : "zh")
+            }
+            aria-label={t("app.language")}
+          >
+            <Icon name="globe" />
+            {i18n.language === "zh" ? "EN" : "中文"}
+          </button>
+        </header>
+
+        <div className="session-toolbar">
+          <span className="scene-label">{t("scene.label")}</span>
+          <SceneSelector
+            currentCfg={cfg}
+            getCurrentConfig={currentConfig}
+            onLoad={applyConfig}
+            onToast={notify}
+            running={locked}
+          />
+          <div className="header-actions">
+            <span className={`engine-state${running ? " is-running" : ""}`}>
+              <i />
+              {t(`app.${action ?? (running ? "running" : "stopped")}`)}
+            </span>
+            <button
+              className={`button run-button${running ? " is-stop" : ""}`}
+              onClick={() => void run()}
+              disabled={action !== null || (!running && enabledCount === 0)}
+              title={enabledCount === 0 ? t("config.enableFirst") : undefined}
+            >
+              <Icon name={running ? "stop" : "play"} />
+              {t(`app.${action ?? (running ? "stop" : "start")}`)}
+            </button>
+          </div>
+        </div>
+
+        {(error || connectionError) && (
+          <div className="error-banner" role="alert">
+            <span>{error || connectionError}</span>
+            <button
+              className="icon-button"
+              onClick={() => {
+                setError("");
+                setConnectionError("");
+              }}
+              aria-label={t("app.close")}
+            >
+              <Icon name="close" />
+            </button>
+          </div>
+        )}
+
+        <main className="config-workspace">
+          <div className="workspace-scroll" key={page}>
             {locked && (
-              <span className="read-only">
+              <p className="read-only">
                 {t(
                   page === "detection" && cfg.joint_direction.enabled && running
                     ? "joint.runtimeEditable"
                     : "config.readOnly",
                 )}
-              </span>
+              </p>
             )}
-          </div>
-          <div className="workspace-scroll" key={page}>
             {page === "targets" ? (
-              <TargetEditor
-                cfg={cfg}
-                onChange={applyConfig}
-                disabled={locked}
-              />
+              <div className="target-config">
+                <TargetEditor
+                  cfg={cfg}
+                  onChange={applyConfig}
+                  disabled={locked}
+                />
+              </div>
             ) : (
               <>
-                <ConfigEditor
-                  cfg={cfg}
-                  device={page}
-                  onChange={applyConfig}
-                  onError={showError}
-                  disabled={locked}
-                  liveJointDirection={running && action === null}
-                />
+                <section className="config-panel">
+                  <div className="workspace-heading">
+                    <h2>{t("config.deviceConfig")}</h2>
+                    {selectedState && (
+                      <span className={`device-state state-${selectedState}`}>
+                        <i className={`state-dot state-${selectedState}`} />
+                        {t(`states.${selectedState}`)}
+                      </span>
+                    )}
+                    <div className="module-toggle">
+                      <span>
+                        {t("config.enableModule", {
+                          name: t(`devices.${page}`),
+                        })}
+                      </span>
+                      <Toggle
+                        label={t("config.enableModule", {
+                          name: t(`devices.${page}`),
+                        })}
+                        checked={deviceEnabled(cfg, page)}
+                        disabled={locked}
+                        onChange={(value) =>
+                          applyConfig(toggleDevice(cfg, page, value))
+                        }
+                      />
+                    </div>
+                  </div>
+                  <ConfigEditor
+                    cfg={cfg}
+                    device={page}
+                    onChange={applyConfig}
+                    onError={showError}
+                    disabled={locked}
+                    liveJointDirection={running && action === null}
+                  />
+                </section>
                 {deviceEnabled(cfg, page) && (
                   <DeviceTelemetry device={page} status={status} />
                 )}
@@ -337,8 +402,8 @@ export default function App() {
             )}
           </div>
         </main>
+        <LogViewer />
       </div>
-      <LogViewer />
       {notice && (
         <div
           className={`notice notice-${notice.type}`}

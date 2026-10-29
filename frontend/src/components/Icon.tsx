@@ -3,6 +3,12 @@ import type { SVGProps } from "react";
 const paths = {
   radio:
     "M5 16a10 10 0 0 1 0-8m14 0a10 10 0 0 1 0 8M8 14a5 5 0 0 1 0-4m8 0a5 5 0 0 1 0 4M12 12v8m-3 0h6",
+  analysis: "M4 4h16v16H4ZM8 15v-3m4 3V8m4 7v-5",
+  compass: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-5-4-2 6-6 2 2-6 6-2Z",
+  crosshair: "M19 12a7 7 0 1 1-14 0 7 7 0 0 1 14 0ZM12 2v5m0 10v5M2 12h5m10 0h5",
+  video: "M3 6h12v12H3Zm12 4 6-3v10l-6-3",
+  wave: "M3 12h3l3-7 6 14 3-7h3",
+  globe: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM3 12h18M12 3c4 5 4 13 0 18-4-5-4-13 0-18Z",
   play: "m9 5 10 7-10 7Z",
   stop: "M6 6h12v12H6Z",
   plus: "M12 5v14M5 12h14",

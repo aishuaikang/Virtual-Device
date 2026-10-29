@@ -1,25 +1,37 @@
 :root {
   color-scheme: light;
   font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Avenir Next", "Segoe UI Variable Text", "PingFang SC",
     "Microsoft YaHei", sans-serif;
   font-size: 13px;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --canvas: #f7f8fa;
+  --canvas: #f4f6fa;
   --surface: #ffffff;
-  --sidebar: #f0f2f5;
-  --text: #252d35;
-  --muted: #687480;
-  --faint: #9aa4ae;
-  --line: #e0e5e9;
-  --accent: #16826c;
-  --accent-hover: #106b59;
-  --accent-soft: #edf6f2;
-  --danger: #c44747;
+  --sidebar: #f7f9fc;
+  --text: #1c2940;
+  --muted: #637289;
+  --faint: #92a0b4;
+  --line: #e5e9f0;
+  --control-line: #dce2ec;
+  --accent: #3567e8;
+  --accent-hover: #2856ce;
+  --accent-soft: #edf2ff;
+  --success: #279574;
+  --success-ink: #26765e;
+  --success-soft: #edf7f2;
+  --danger: #c33e48;
   --danger-soft: #fdf0f0;
   --warning: #ac7b29;
+  --nav: #172338;
+  --nav-text: #b8c4d6;
+  --nav-muted: #91a1b9;
+  --nav-hover: #23324a;
+  --nav-selected: #2d4e8f;
+  --nav-accent: #8eb0ff;
+  --radius: 7px;
+  --shadow: 0 2px 6px #1c294005, 0 8px 24px #1c294003;
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   color: var(--text);
   background: var(--canvas);
@@ -90,7 +102,7 @@ code {
   font-variant-numeric: tabular-nums;
 }
 ::selection {
-  background: #c9e7dc;
+  background: #dce6ff;
 }
 @media (prefers-reduced-motion: reduce) {
   *,

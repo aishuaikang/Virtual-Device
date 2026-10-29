@@ -47,6 +47,7 @@ export default {
     saved: "场景已保存",
   },
   config: {
+    deviceConfig: "设备配置",
     readOnly: "运行中只读",
     advanced: "更多设置",
     servers: "服务器地址",
