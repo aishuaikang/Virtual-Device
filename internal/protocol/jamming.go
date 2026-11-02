@@ -53,8 +53,7 @@ func (p *JammingPacket) ToBytes() []byte {
 	buf := make([]byte, totalLen)
 
 	buf[0] = p.Header
-	buf[1] = byte(p.ID >> 8)   // ID高字节
-	buf[2] = byte(p.ID & 0xFF) // ID低字节
+	binary.LittleEndian.PutUint16(buf[1:3], p.ID)
 	buf[3] = p.Length
 	buf[4] = p.Cmd
 
@@ -82,7 +81,7 @@ func ParseJammingPacket(data []byte) (*JammingPacket, error) {
 		return nil, fmt.Errorf("无效的协议头: 0x%02X", packet.Header)
 	}
 
-	packet.ID = binary.BigEndian.Uint16(data[1:3])
+	packet.ID = binary.LittleEndian.Uint16(data[1:3])
 	packet.Length = data[3]
 	packet.Cmd = data[4]
 
@@ -110,20 +109,59 @@ func ParseJammingPacket(data []byte) (*JammingPacket, error) {
 	return packet, nil
 }
 
+// JammingStreamDecoder retains incomplete frames between TCP reads.
+type JammingStreamDecoder struct {
+	buffer []byte
+}
+
+func (d *JammingStreamDecoder) Feed(data []byte) []*JammingPacket {
+	d.buffer = append(d.buffer, data...)
+	var packets []*JammingPacket
+	for len(d.buffer) > 0 {
+		start := bytes.IndexByte(d.buffer, ProtocolHeader)
+		if start < 0 {
+			d.buffer = nil
+			break
+		}
+		d.buffer = d.buffer[start:]
+		if len(d.buffer) < 4 {
+			break
+		}
+		length := int(d.buffer[3])
+		if length < 6 {
+			d.buffer = d.buffer[1:]
+			continue
+		}
+		if len(d.buffer) < length {
+			break
+		}
+		packet, err := ParseJammingPacket(d.buffer[:length])
+		if err != nil {
+			d.buffer = d.buffer[1:]
+			continue
+		}
+		// Returned payloads must survive reuse of the receive buffer.
+		packet.Data = bytes.Clone(packet.Data)
+		packets = append(packets, packet)
+		d.buffer = d.buffer[length:]
+	}
+	return packets
+}
+
 // 创建查询模块信息响应包
 func CreateModuleInfoResponse(deviceID int, modules []ModuleInfo) *JammingPacket {
 	// 预分配缓冲区大小: 每个模块11字节 (2+2+1+1+1+1+1+2)
 	buf := bytes.NewBuffer(make([]byte, 0, len(modules)*11))
 
 	for _, module := range modules {
-		binary.Write(buf, binary.BigEndian, module.FreqStart)
-		binary.Write(buf, binary.BigEndian, module.FreqEnd)
-		binary.Write(buf, binary.BigEndian, module.PowerDisp)
-		binary.Write(buf, binary.BigEndian, module.TempDisp)
-		binary.Write(buf, binary.BigEndian, module.SwitchSetting)
-		binary.Write(buf, binary.BigEndian, module.PowerSetting)
-		binary.Write(buf, binary.BigEndian, module.Alarm)
-		binary.Write(buf, binary.BigEndian, module.Reserved)
+		binary.Write(buf, binary.LittleEndian, module.FreqStart)
+		binary.Write(buf, binary.LittleEndian, module.FreqEnd)
+		binary.Write(buf, binary.LittleEndian, module.PowerDisp)
+		binary.Write(buf, binary.LittleEndian, module.TempDisp)
+		binary.Write(buf, binary.LittleEndian, module.SwitchSetting)
+		binary.Write(buf, binary.LittleEndian, module.PowerSetting)
+		binary.Write(buf, binary.LittleEndian, module.Alarm)
+		binary.Write(buf, binary.LittleEndian, module.Reserved)
 	}
 
 	data := buf.Bytes()
@@ -156,7 +194,7 @@ func CreateAddrListResponse(deviceID int, cmd uint8, addresses []uint16) *Jammin
 	buf := new(bytes.Buffer)
 
 	for _, addr := range addresses {
-		binary.Write(buf, binary.BigEndian, addr)
+		binary.Write(buf, binary.LittleEndian, addr)
 	}
 
 	data := buf.Bytes()

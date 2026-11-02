@@ -176,7 +176,7 @@ func (a *App) GetDefaultConfig() config.Config {
 // SyncCurrentConfig 同步当前编辑中的配置到后端，供关闭拦截与保存逻辑使用。
 func (a *App) SyncCurrentConfig(cfg config.Config) error {
 	normalizedCfg := normalizeConfigCopy(&cfg)
-	if err := a.engine.UpdateJointDirection(normalizedCfg.JointDirection); err != nil {
+	if err := a.engine.UpdateRuntimeConfig(*normalizedCfg); err != nil {
 		return err
 	}
 	a.setCurrentConfig(normalizedCfg)

@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"slices"
 	"sync"
 	"time"
 	"virtual-device-ui/internal/config"
@@ -20,6 +21,7 @@ type JammingModule interface {
 	Start()
 	Stop()
 	ConnectedCount() int
+	UpdateSimulation(settings config.JammingConfig) error
 }
 
 type jammingClientSession struct {
@@ -60,25 +62,66 @@ type jamming struct {
 	deviceId int
 	title    string
 
-	config    *config.Config
-	generator *mocks.JammingDataGenerator
-	ctx       context.Context
-	cancel    context.CancelFunc
-	clients   map[string]*jammingClientSession
-	mu        sync.RWMutex
+	config     *config.Config
+	generator  *mocks.JammingDataGenerator
+	ctx        context.Context
+	cancel     context.CancelFunc
+	clients    map[string]*jammingClientSession
+	simulation config.JammingConfig
+	mu         sync.RWMutex
 }
 
 func NewJammingModule(deviceID int) JammingModule {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &jamming{
-		deviceId:  deviceID,
-		title:     "干扰打击模块",
-		config:    config.GetConfig(),
-		generator: mocks.NewJammingDataGenerator(deviceID, 10),
-		ctx:       ctx,
-		cancel:    cancel,
-		clients:   make(map[string]*jammingClientSession),
+	cfg := config.GetConfig()
+	module := &jamming{
+		deviceId:   deviceID,
+		title:      "干扰打击模块",
+		config:     cfg,
+		generator:  mocks.NewJammingDataGenerator(deviceID, 10),
+		ctx:        ctx,
+		cancel:     cancel,
+		clients:    make(map[string]*jammingClientSession),
+		simulation: cfg.Jamming,
 	}
+	module.simulation.Hosts = slices.Clone(cfg.Jamming.Hosts)
+	if module.simulation.FaultMode == config.JammingFaultStuckOn {
+		module.generator.SetStuckChannel(module.simulation.FaultChannel)
+	}
+	return module
+}
+
+// UpdateSimulation changes faults without resetting physical channel state.
+func (j *jamming) UpdateSimulation(settings config.JammingConfig) error {
+	if err := config.ValidateJammingSimulation(settings); err != nil {
+		return err
+	}
+	j.mu.Lock()
+	current := j.simulation
+	if settings.Enabled != current.Enabled || settings.DeviceID != current.DeviceID ||
+		settings.Port != current.Port || !slices.Equal(settings.Hosts, current.Hosts) {
+		j.mu.Unlock()
+		return fmt.Errorf("请先停止模拟器再修改全向连接配置")
+	}
+	j.simulation = settings
+	j.simulation.Hosts = slices.Clone(settings.Hosts)
+	channel := 0
+	if settings.FaultMode == config.JammingFaultStuckOn {
+		channel = settings.FaultChannel
+	}
+	j.generator.SetStuckChannel(channel)
+	var disconnected []*jammingClientSession
+	if settings.FaultMode == config.JammingFaultDisconnected {
+		for _, session := range j.clients {
+			disconnected = append(disconnected, session)
+		}
+		j.clients = make(map[string]*jammingClientSession)
+	}
+	j.mu.Unlock()
+	for _, session := range disconnected {
+		closeJammingSession(session)
+	}
+	return nil
 }
 
 func (j *jamming) ConnectedCount() int {
@@ -121,7 +164,7 @@ func (j *jamming) Start() {
 func (j *jamming) getOrCreateSession(serverAddr string) (*jammingClientSession, bool) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	if j.ctx.Err() != nil {
+	if j.ctx.Err() != nil || j.simulation.FaultMode == config.JammingFaultDisconnected {
 		return nil, false
 	}
 
@@ -164,7 +207,7 @@ func (j *jamming) hasActiveSession(serverAddr string) bool {
 func (j *jamming) attachSessionConn(serverAddr string, session *jammingClientSession, conn net.Conn) bool {
 	j.mu.RLock()
 	current, exists := j.clients[serverAddr]
-	if !exists || current != session {
+	if !exists || current != session || j.simulation.FaultMode == config.JammingFaultDisconnected {
 		j.mu.RUnlock()
 		return false
 	}
@@ -198,6 +241,12 @@ func (j *jamming) connectToServers() {
 
 // tryConnect 尝试连接到所有配置的服务器
 func (j *jamming) tryConnect() {
+	j.mu.RLock()
+	disconnected := j.simulation.FaultMode == config.JammingFaultDisconnected
+	j.mu.RUnlock()
+	if disconnected || j.ctx.Err() != nil {
+		return
+	}
 	for _, host := range j.config.Jamming.Hosts {
 		serverAddr := net.JoinHostPort(host, fmt.Sprintf("%d", j.config.Jamming.Port))
 
@@ -221,7 +270,8 @@ func (j *jamming) tryConnect() {
 		}
 		j.mu.Unlock()
 
-		conn, err := net.DialTimeout("tcp", serverAddr, 1*time.Second)
+		dialer := net.Dialer{Timeout: time.Second}
+		conn, err := dialer.DialContext(j.ctx, "tcp", serverAddr)
 		if err != nil {
 			log.Printf("设备ID=%d\thost=%s\tport=%d [%s] 连接失败: %v", j.deviceId, host, j.config.Jamming.Port, j.title, err)
 			continue
@@ -249,18 +299,21 @@ func (j *jamming) tryConnect() {
 // markSessionDisconnected 标记会话断开
 func (j *jamming) markSessionDisconnected(serverAddr string, session *jammingClientSession) {
 	j.mu.Lock()
-	defer j.mu.Unlock()
-
 	if s, exists := j.clients[serverAddr]; exists && s == session {
-		session.mu.Lock()
-		session.isActive = false
-		session.cancel()
-		if session.conn != nil {
-			session.conn.Close()
-			session.conn = nil
-		}
-		session.mu.Unlock()
 		delete(j.clients, serverAddr)
+	}
+	j.mu.Unlock()
+	closeJammingSession(session)
+}
+
+func closeJammingSession(session *jammingClientSession) {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	session.isActive = false
+	session.cancel()
+	if session.conn != nil {
+		session.conn.Close()
+		session.conn = nil
 	}
 }
 
@@ -315,100 +368,88 @@ func (j *jamming) handleReportData(serverAddr string, session *jammingClientSess
 func (j *jamming) handleDataReception(serverAddr string, session *jammingClientSession) {
 	defer j.markSessionDisconnected(serverAddr, session)
 	buf := make([]byte, 2048)
-	for {
-		select {
-		case <-session.ctx.Done():
+	var decoder protocol.JammingStreamDecoder
+	for session.ctx.Err() == nil {
+		connection := session.activeConn()
+		if connection == nil {
 			return
-		default:
-			connection := session.activeConn()
-			if connection == nil {
-				return
-			}
-
-			if err := connection.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
-				log.Printf("设备ID=%d [%s] 设置 %s 读取期限失败: %v", j.deviceId, j.title, serverAddr, err)
-				return
-			}
-			n, err := connection.Read(buf)
-			if err != nil {
-				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-					continue
-				}
-				log.Printf("设备ID=%d [%s] 从 %s 读取数据失败: %v", j.deviceId, j.title, serverAddr, err)
-				return
-			}
-
-			if n <= 0 {
-				continue
-			}
-
-			log.Printf("[打击] 设备ID=%d 从 %s 接收到 %d 字节数据", j.deviceId, serverAddr, n)
-
-			// 解析命令
-			packet, err := protocol.ParseJammingPacket(buf[:n])
-			if err != nil {
-				log.Printf("[打击] 设备ID=%d 从 %s 解析数据包失败: %v", j.deviceId, serverAddr, err)
-				continue
-			}
-
-			log.Printf("[打击] 设备ID=%d 接收到命令: Cmd=0x%02X, DataLen=%d", j.deviceId, packet.Cmd, len(packet.Data))
-
-			// 处理命令并响应
-			resp := j.handleCommand(packet)
-			if resp != nil {
-				data := resp.ToBytes()
-				if data == nil {
-					log.Printf("设备ID=%d [%s] 响应数据包转换字节失败", j.deviceId, j.title)
-					continue
-				}
-
-				if writeErr := session.write(data); writeErr != nil {
-					log.Printf("[打击] 设备ID=%d 向 %s 发送响应失败: %v", j.deviceId, serverAddr, writeErr)
+		}
+		if err := connection.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
+			return
+		}
+		n, readErr := connection.Read(buf)
+		if n > 0 {
+			log.Printf("[打击] 设备ID=%d RX %s: %X", j.deviceId, serverAddr, buf[:n])
+			for _, packet := range decoder.Feed(buf[:n]) {
+				if session.ctx.Err() != nil {
 					return
 				}
-				log.Printf("[打击] 设备ID=%d 向 %s 发送响应成功，响应长度: %d 字节", j.deviceId, serverAddr, len(data))
-			} else {
-				log.Printf("[打击] 设备ID=%d 命令处理返回空响应，不发送数据", j.deviceId)
+				response := j.handleCommand(packet)
+				if response == nil {
+					continue
+				}
+				j.mu.RLock()
+				delay := j.simulation.ResponseDelayMS
+				j.mu.RUnlock()
+				if delay > 0 {
+					timer := time.NewTimer(time.Duration(delay) * time.Millisecond)
+					select {
+					case <-session.ctx.Done():
+						timer.Stop()
+						return
+					case <-timer.C:
+					}
+				}
+				data := response.ToBytes()
+				if err := session.write(data); err != nil {
+					log.Printf("[打击] 设备ID=%d 向 %s 发送响应失败: %v", j.deviceId, serverAddr, err)
+					return
+				}
+				log.Printf("[打击] 设备ID=%d TX %s: %X", j.deviceId, serverAddr, data)
 			}
+		}
+		if readErr != nil {
+			if netErr, ok := readErr.(net.Error); ok && netErr.Timeout() {
+				continue
+			}
+			log.Printf("[打击] 设备ID=%d 从 %s 读取数据失败: %v", j.deviceId, serverAddr, readErr)
+			return
 		}
 	}
 }
 
 func (j *jamming) handleCommand(packet *protocol.JammingPacket) *protocol.JammingPacket {
-	if j.generator == nil {
-		log.Printf("[打击] 设备ID=%d generator 为 nil，返回通用成功响应", j.deviceId)
-		// 即使 generator 为 nil，也返回成功响应
-		return protocol.CreateSetPowerResponse(j.deviceId, 0)
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	if j.generator == nil || j.simulation.FaultMode == config.JammingFaultDisconnected {
+		return nil
 	}
-
-	log.Printf("[打击] 设备ID=%d 开始处理命令: 0x%02X", j.deviceId, packet.Cmd)
-
-	var resp *protocol.JammingPacket
+	var response *protocol.JammingPacket
 	switch packet.Cmd {
 	case protocol.CmdSetPower:
-		log.Printf("[打击] 设备ID=%d 处理设置功率命令", j.deviceId)
-		resp = j.generator.HandleSetPowerCommand(packet)
+		response = j.generator.HandleSetPowerCommand(packet)
 	case protocol.CmdQueryModules:
-		log.Printf("[打击] 设备ID=%d 处理查询模块命令", j.deviceId)
-		resp = j.generator.GenerateModuleInfoPacket()
+		if len(packet.Data) != 0 {
+			return nil
+		}
+		response = j.generator.GenerateModuleInfoPacket()
+		if j.simulation.FaultMode == config.JammingFaultPartialStatus {
+			response.Data = response.Data[:9*11]
+			response.Length = uint8(6 + len(response.Data))
+		}
 	case protocol.CmdDownloadAddr, protocol.CmdQueryAddr:
-		log.Printf("[打击] 设备ID=%d 处理地址列表命令", j.deviceId)
-		resp = j.generator.HandleAddressListCommand(packet)
+		response = j.generator.HandleAddressListCommand(packet)
 	default:
-		log.Printf("[打击] 设备ID=%d 未知命令: 0x%02X，返回通用成功响应", j.deviceId, packet.Cmd)
-		// 对于未知命令，也返回成功响应
-		return protocol.CreateSetPowerResponse(j.deviceId, 0)
+		log.Printf("[打击] 设备ID=%d 忽略未知命令: 0x%02X", j.deviceId, packet.Cmd)
+		return nil
 	}
-
-	if resp != nil {
-		log.Printf("[打击] 设备ID=%d 命令处理完成，生成响应: Cmd=0x%02X, DataLen=%d", j.deviceId, resp.Cmd, len(resp.Data))
-	} else {
-		log.Printf("[打击] 设备ID=%d 命令处理返回空响应，使用通用成功响应", j.deviceId)
-		// 如果处理函数返回 nil，返回通用成功响应
-		resp = protocol.CreateSetPowerResponse(j.deviceId, 0)
+	if j.simulation.FaultMode == config.JammingFaultSilent ||
+		(j.simulation.FaultMode == config.JammingFaultDropACK && packet.Cmd == protocol.CmdSetPower) ||
+		(j.simulation.FaultMode == config.JammingFaultDropStatus && packet.Cmd == protocol.CmdQueryModules) {
+		log.Printf("[打击] 设备ID=%d 故障模式 %s 丢弃响应: Cmd=0x%02X", j.deviceId, j.simulation.FaultMode, packet.Cmd)
+		return nil
 	}
-
-	return resp
+	return response
 }
 
 // Stop 停止打击模块
@@ -418,21 +459,14 @@ func (j *jamming) Stop() {
 	// 取消context，通知所有goroutines停止
 	j.cancel()
 
-	// 关闭所有连接
+	// Detach sessions before closing sockets; network I/O never holds the module lock.
 	j.mu.Lock()
-	for addr, session := range j.clients {
-		log.Printf("[打击] 设备ID=%d 关闭连接: %s", j.deviceId, addr)
-		session.mu.Lock()
-		session.isActive = false
-		session.cancel()
-		if session.conn != nil {
-			session.conn.Close()
-			session.conn = nil
-		}
-		session.mu.Unlock()
-	}
+	sessions := j.clients
 	j.clients = make(map[string]*jammingClientSession)
 	j.mu.Unlock()
+	for _, session := range sessions {
+		closeJammingSession(session)
+	}
 
 	log.Printf("[打击] 设备ID=%d 模块已停止", j.deviceId)
 }

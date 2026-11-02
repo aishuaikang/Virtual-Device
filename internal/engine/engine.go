@@ -235,16 +235,45 @@ func (e *Engine) UpdateJointDirection(settings config.JointDirectionConfig) erro
 	if !e.running {
 		return nil
 	}
+	if err := e.validateJointDirectionUpdate(settings); err != nil {
+		return err
+	}
+	if e.jointDirection != nil {
+		e.jointDirection.Update(settings)
+	}
+	return nil
+}
+
+func (e *Engine) validateJointDirectionUpdate(settings config.JointDirectionConfig) error {
 	if e.jointDirection == nil {
 		if settings.Enabled {
 			return fmt.Errorf("请先停止模拟器再开启联合测向测试")
 		}
 		return nil
 	}
-	if err := config.ValidateJointDirectionUpdate(*e.jointDirection.Snapshot(), settings); err != nil {
+	return config.ValidateJointDirectionUpdate(*e.jointDirection.Snapshot(), settings)
+}
+
+// UpdateRuntimeConfig validates all runtime edits before applying any of them.
+func (e *Engine) UpdateRuntimeConfig(cfg config.Config) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if !e.running {
+		return nil
+	}
+	if err := e.validateJointDirectionUpdate(cfg.JointDirection); err != nil {
 		return err
 	}
-	e.jointDirection.Update(settings)
+	if e.jamming == nil {
+		if cfg.Jamming.Enabled {
+			return fmt.Errorf("请先停止模拟器再开启全向模块")
+		}
+	} else if err := e.jamming.UpdateSimulation(cfg.Jamming); err != nil {
+		return err
+	}
+	if e.jointDirection != nil {
+		e.jointDirection.Update(cfg.JointDirection)
+	}
 	return nil
 }
 

@@ -350,7 +350,9 @@ export default function App() {
                 {t(
                   page === "detection" && cfg.joint_direction.enabled && running
                     ? "joint.runtimeEditable"
-                    : "config.readOnly",
+                    : page === "jamming" && cfg.jamming.enabled && running
+                      ? "jamming.runtimeEditable"
+                      : "config.readOnly",
                 )}
               </p>
             )}
@@ -398,6 +400,7 @@ export default function App() {
                     onError={showError}
                     disabled={locked}
                     liveJointDirection={running && action === null}
+                    liveJamming={running && action === null && cfg.jamming.enabled}
                   />
                 </section>
                 {deviceEnabled(cfg, page) && (

@@ -23,6 +23,7 @@ interface Props {
   onError: (error: unknown) => void;
   disabled: boolean;
   liveJointDirection: boolean;
+  liveJamming: boolean;
 }
 
 export default function ConfigEditor({
@@ -32,6 +33,7 @@ export default function ConfigEditor({
   onError,
   disabled,
   liveJointDirection,
+  liveJamming,
 }: Props) {
   const { t } = useTranslation();
   const [localIPs, setLocalIPs] = useState<string[]>([]);
@@ -449,10 +451,48 @@ export default function ConfigEditor({
             label={t("config.deviceID")}
             value={cfg[device].deviceID}
             onChange={(deviceID) => patch(device, { deviceID })}
-            min={0}
+            min={device === "jamming" ? 1 : 0}
+            max={device === "jamming" ? 65535 : undefined}
             disabled={disabled}
           />
         </div>
+      )}
+      {device === "jamming" && (
+        <>
+          <Advanced>
+            <Field label={t("jamming.faultMode")}>
+              <Select
+                aria-label={t("jamming.faultMode")}
+                value={cfg.jamming.fault_mode || "normal"}
+                onChange={(fault_mode) => patch("jamming", { fault_mode })}
+                disabled={disabled && !liveJamming}
+                options={[
+                  "normal", "drop_ack", "drop_status", "silent", "stuck_on",
+                  "partial_status", "disconnected",
+                ].map((value) => ({ value, label: t(`jamming.${value}`) }))}
+              />
+            </Field>
+            <NumberField
+              label={t("config.responseDelay")}
+              value={cfg.jamming.response_delay_ms ?? 0}
+              onChange={(response_delay_ms) => patch("jamming", { response_delay_ms })}
+              min={0}
+              max={10000}
+              disabled={disabled && !liveJamming}
+            />
+            {cfg.jamming.fault_mode === "stuck_on" && (
+              <NumberField
+                label={t("jamming.faultChannel")}
+                value={cfg.jamming.fault_channel ?? 1}
+                onChange={(fault_channel) => patch("jamming", { fault_channel })}
+                min={1}
+                max={10}
+                disabled={disabled && !liveJamming}
+              />
+            )}
+          </Advanced>
+          <p className="relay16-hint">{t("jamming.hint")}</p>
+        </>
       )}
     </div>
   );

@@ -29,7 +29,7 @@ type PredefinedDrone struct {
 // AnalysisConfigPushType 分析配置推送类型
 type AnalysisConfigPushType string
 
-// BaseConfig 基础配置（用于FPV和Jamming模块）
+// BaseConfig 基础配置（用于FPV模块）
 type BaseConfig struct {
 	Enabled  bool     `json:"enabled"`  // 是否启用模块
 	DeviceID int      `json:"deviceID"` // 设备ID
@@ -214,7 +214,7 @@ type Config struct {
 	Detections                 []DetectionConfig    `json:"detections"`                     // 多侦测模块配置
 	JointDirection             JointDirectionConfig `json:"joint_direction"`                // 联合测向共享侦测目标
 	FPV                        BaseConfig           `json:"fpv"`                            // FPV模块配置
-	Jamming                    BaseConfig           `json:"jamming"`                        // 干扰模块配置
+	Jamming                    JammingConfig        `json:"jamming"`                        // 干扰模块配置
 	DirectedStrike             DirectedStrikeConfig `json:"directed_strike"`                // 定向打击设备模拟器配置
 	Relay16                    Relay16Config        `json:"relay16"`                        // 定向窄带继电器模拟器配置
 	PrecisionDF                PrecisionDFConfig    `json:"precision_df"`                   // 精准测向接收机模拟器配置
@@ -276,7 +276,7 @@ func NormalizeConfig(cfg *Config) {
 	cfg.Analysis.Hosts = normalizeHosts(cfg.Analysis.Hosts)
 	normalizeDetectionConfig(&cfg.Detection)
 	cfg.FPV.Hosts = normalizeHosts(cfg.FPV.Hosts)
-	cfg.Jamming.Hosts = normalizeHosts(cfg.Jamming.Hosts)
+	cfg.Jamming.normalize()
 	cfg.DirectedStrike.Host = strings.TrimSpace(cfg.DirectedStrike.Host)
 	cfg.Relay16.Host = strings.TrimSpace(cfg.Relay16.Host)
 	cfg.PrecisionDF.Host = strings.TrimSpace(cfg.PrecisionDF.Host)
@@ -320,7 +320,7 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		Detections                 []json.RawMessage     `json:"detections"`
 		JointDirection             json.RawMessage       `json:"joint_direction"`
 		FPV                        BaseConfig            `json:"fpv"`
-		Jamming                    BaseConfig            `json:"jamming"`
+		Jamming                    JammingConfig         `json:"jamming"`
 		DirectedStrike             *DirectedStrikeConfig `json:"directed_strike"`
 		Relay16                    json.RawMessage       `json:"relay16"`
 		PrecisionDF                json.RawMessage       `json:"precision_df"`
@@ -546,7 +546,7 @@ func DefaultConfig() *Config {
 			Hosts:    []string{"127.0.0.1"},
 			Port:     10000,
 		},
-		Jamming: BaseConfig{
+		Jamming: JammingConfig{
 			Enabled:  true,
 			DeviceID: 2345,
 			Hosts:    []string{"127.0.0.1"},
@@ -735,7 +735,7 @@ func validateConfig(config *Config) error {
 	}
 
 	// 验证Jamming配置
-	if err := validateBaseConfig(&config.Jamming, "Jamming"); err != nil {
+	if err := validateJammingConfig(config.Jamming); err != nil {
 		return fmt.Errorf("jamming配置错误: %v", err)
 	}
 

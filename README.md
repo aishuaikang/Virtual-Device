@@ -6,6 +6,8 @@
 
 类型 12 的五面定向窄带继电器设备见 [定向窄带模拟说明](docs/relay16.md)。
 
+全向十路开关、协议应答与断网恢复测试见 [全向模拟说明](docs/jamming.md)。
+
 ## About
 
 This is the official Wails React-TS template.

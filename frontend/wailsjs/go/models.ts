@@ -104,6 +104,30 @@ export namespace config {
 	        this.response_delay_ms = source["response_delay_ms"];
 	    }
 	}
+	export class JammingConfig {
+	    enabled: boolean;
+	    deviceID: number;
+	    hosts: string[];
+	    port: number;
+	    response_delay_ms: number;
+	    fault_mode: string;
+	    fault_channel: number;
+
+	    static createFrom(source: any = {}) {
+	        return new JammingConfig(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.deviceID = source["deviceID"];
+	        this.hosts = source["hosts"];
+	        this.port = source["port"];
+	        this.response_delay_ms = source["response_delay_ms"];
+	        this.fault_mode = source["fault_mode"];
+	        this.fault_channel = source["fault_channel"];
+	    }
+	}
 	export class JointDirectionSample {
 	    deviceID: number;
 	    reporting: boolean;
@@ -279,7 +303,7 @@ export namespace config {
 	    detections: DetectionConfig[];
 	    joint_direction: JointDirectionConfig;
 	    fpv: BaseConfig;
-	    jamming: BaseConfig;
+	    jamming: JammingConfig;
 	    directed_strike: DirectedStrikeConfig;
 	    relay16: Relay16Config;
 	    precision_df: PrecisionDFConfig;
@@ -302,7 +326,7 @@ export namespace config {
 	        this.detections = this.convertValues(source["detections"], DetectionConfig);
 	        this.joint_direction = this.convertValues(source["joint_direction"], JointDirectionConfig);
 	        this.fpv = this.convertValues(source["fpv"], BaseConfig);
-	        this.jamming = this.convertValues(source["jamming"], BaseConfig);
+	        this.jamming = this.convertValues(source["jamming"], JammingConfig);
 	        this.directed_strike = this.convertValues(source["directed_strike"], DirectedStrikeConfig);
 	        this.relay16 = this.convertValues(source["relay16"], Relay16Config);
 	        this.precision_df = this.convertValues(source["precision_df"], PrecisionDFConfig);
