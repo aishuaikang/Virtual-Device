@@ -2,6 +2,7 @@ package mocks
 
 import (
 	"encoding/binary"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -88,6 +89,80 @@ func assertBackendCompatibleRIDSerial(t *testing.T, serial string) {
 		if (r < '0' || r > '9') && (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') {
 			t.Fatalf("RID serial %q contains non-alphanumeric suffix character %q", serial, r)
 		}
+	}
+}
+
+func TestGenerateDetectionDataMixesSignalSNAndMovingGPSWithLegacyPackets(t *testing.T) {
+	originalCfg := config.GetConfig()
+	t.Cleanup(func() { config.SetGlobalConfig(originalCfg) })
+	cfg := config.DefaultConfig()
+	cfg.PredefinedDrones = []config.PredefinedDrone{
+		{Serial: "03Z1549901", Model: "Mini 3 Pro", Freq: 5745, RSSI: -56, DroneGPS: config.GPS{Lng: 121.513321, Lat: 31.334805}},
+		{Serial: "03Z1549902", Model: "Mini 3 Pro", Freq: 5745, RSSI: -60, DroneGPS: config.GPS{Lng: 121.513322, Lat: 31.334806}},
+	}
+	config.SetGlobalConfig(cfg)
+	generator := NewMockDataGenerator(2).(*mockDataGenerator)
+	var previousGPS string
+	positioned, legacy := 0, 0
+	for range 4 {
+		packet := generator.GenerateDetectionData(32538, nil).(*SpectrumData)
+		fields := make(map[string]string)
+		for _, field := range packet.ExtraFields {
+			fields[field.Key] = field.Value
+		}
+		if fields["sn"] == "" {
+			legacy++
+			if fields["drone_GPS"] != "" {
+				t.Fatalf("GPS packet must always include a signal SN: %q", packet.String())
+			}
+			continue
+		}
+		positioned++
+		if fields["sn"] != "03Z1549901" {
+			t.Fatalf("signal SN changed between packets: %q", packet.String())
+		}
+		var wantGPS GPS
+		for _, drone := range generator.droneList {
+			if drone.Serial == fields["sn"] {
+				wantGPS = drone.DroneGPS
+			}
+		}
+		want := fmt.Sprintf("%.6f,%.6f", wantGPS.Lng, wantGPS.Lat)
+		if fields["drone_GPS"] != want || !strings.Contains(packet.String(), "drone_GPS="+want+",") {
+			t.Fatalf("packet must use current longitude,latitude: %q, want %q", packet.String(), want)
+		}
+		if previousGPS == want {
+			t.Fatalf("GPS did not move between packets: %q", want)
+		}
+		previousGPS = want
+	}
+	if positioned != 2 || legacy != 2 {
+		t.Fatalf("want both packet formats in each scan round, got positioned=%d, legacy=%d", positioned, legacy)
+	}
+}
+
+func TestGenerateDetectionDataKeepsPacketFormatsAfterRefresh(t *testing.T) {
+	originalCfg := config.GetConfig()
+	t.Cleanup(func() { config.SetGlobalConfig(originalCfg) })
+	cfg := config.DefaultConfig()
+	cfg.PredefinedDrones = nil
+	config.SetGlobalConfig(cfg)
+	generator := NewMockDataGenerator(2)
+	for round := range 2 {
+		positioned := 0
+		for range 2 {
+			packet := generator.GenerateDetectionData(32538, nil).String()
+			if strings.Contains(packet, "drone_GPS=") {
+				positioned++
+				if !strings.Contains(packet, "sn=") {
+					t.Fatalf("round %d GPS packet has no signal SN: %q", round, packet)
+				}
+			}
+		}
+		if positioned != 1 {
+			t.Fatalf("round %d has %d GPS packets, want 1", round, positioned)
+		}
+		generator.RefreshRandomDrones()
 	}
 }
 

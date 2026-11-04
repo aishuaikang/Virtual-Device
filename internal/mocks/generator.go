@@ -194,6 +194,7 @@ func (m *mockDataGenerator) initializeDrones() {
 			RSSI:           rssi,
 			DroneGPS:       droneGPS,
 			PilotGPS:       pilotGPS,
+			detectionGPS:   i%2 == 0, // 混合定位目标与原有频点目标。
 		}
 
 		// 根据配置的类型或自动判断来设置DID/RID列表
@@ -324,6 +325,7 @@ func (m *mockDataGenerator) RefreshRandomDrones() {
 			RSSI:           rssi,
 			DroneGPS:       droneGPS,
 			PilotGPS:       pilotGPS,
+			detectionGPS:   m.droneList[i].detectionGPS,
 		}
 
 		// 自动判断类型
@@ -1258,7 +1260,7 @@ func (m *mockDataGenerator) generateSpectrumExtraFields(droneInfo *DroneInfo) []
 	seed := spectrumSeed(droneInfo.Serial, droneInfo.Model)
 	bandwidths := []string{"5M", "10M", "20M", "40M"}
 
-	return []SpectrumExtraField{
+	fields := []SpectrumExtraField{
 		{
 			Key:   "id",
 			Value: fmt.Sprintf("%d", 10000+seed%90000),
@@ -1276,6 +1278,13 @@ func (m *mockDataGenerator) generateSpectrumExtraFields(droneInfo *DroneInfo) []
 			Value: fmt.Sprintf("%d", m.faker.IntRange(1, 8)),
 		},
 	}
+	if droneInfo.detectionGPS && droneInfo.Serial != "" {
+		fields = append(fields,
+			SpectrumExtraField{Key: "sn", Value: droneInfo.Serial},
+			SpectrumExtraField{Key: "drone_GPS", Value: fmt.Sprintf("%.6f,%.6f", droneInfo.DroneGPS.Lng, droneInfo.DroneGPS.Lat)},
+		)
+	}
+	return fields
 }
 
 func spectrumSeed(serial string, model string) uint32 {

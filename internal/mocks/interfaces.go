@@ -24,6 +24,8 @@ type DroneInfo struct {
 	DroneGPS       GPS     // 无人机坐标  （浮点）
 	PilotGPS       GPS     // 飞手坐标(浮点)
 
+	detectionGPS bool // 侦测报文是否携带 SN 和定位
+
 	// 运动状态信息（用于保持运动连续性）
 	Direction float64 // 当前运动方向（角度，0-360度）
 	Speed     float64 // 当前速度（米/秒）
